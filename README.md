@@ -1,4 +1,4 @@
-# 7/24 IDE
+# <img src="icon.png" width="40" height="40" align="center" /> 7/24 IDE
 
 ![7/24 IDE Social Preview](social-preview.png)
 
