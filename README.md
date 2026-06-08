@@ -1,6 +1,6 @@
 # <img src="icon.png" width="40" height="40" align="center" /> 7/24 IDE
 
-![7/24 IDE Social Preview](social-preview.png)
+![7/24 IDE Social Preview](social-preview-light.png)
 
 A desktop AI coding agent for Windows. You describe what you want to build —
 the agent reads files, writes code, runs commands, and shows the result. It
