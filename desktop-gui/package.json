@@ -1,0 +1,95 @@
+{
+  "name": "desktop-gui",
+  "version": "1.0.0",
+  "description": "7/24 IDE Desktop GUI",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node build.js",
+    "start": "npm run build && electron .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dist": "npm run build && electron-builder --win",
+    "dist:portable": "npm run build && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "28.2.0",
+    "electron-builder": "^24.9.0",
+    "esbuild": "^0.19.0",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.8"
+  },
+  "build": {
+    "appId": "com.seven24.ide",
+    "productName": "7-24 IDE",
+    "electronVersion": "28.2.0",
+    "copyright": "© 2026 7/24 IDE",
+    "compression": "maximum",
+    "directories": {
+      "output": "../dist-installer",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/main.js",
+      "dist/preload.js",
+      "dist/renderer.js",
+      "src/index.html",
+      "src/styles.css",
+      "package.json",
+      "!**/*.map",
+      "!**/*.ts",
+      "!**/*.test.*",
+      "!src/lib/**",
+      "!build.js",
+      "!tsconfig.json",
+      "!**/__tests__/**",
+      "!**/.git/**"
+    ],
+    "asar": true,
+    "asarUnpack": [],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "7-24-IDE-Setup-${version}.${ext}",
+      "executableName": "7-24 IDE",
+      "publisherName": "7/24 IDE"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "7-24 IDE",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "license": "build/license.txt",
+      "menuCategory": "7-24 IDE"
+    },
+    "portable": {
+      "artifactName": "7-24-IDE-Portable-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "strmax195-hue",
+        "repo": "7-24-IDE",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
+}

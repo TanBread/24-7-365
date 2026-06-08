@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7/24 IDE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- ═══════════ TITLEBAR ═══════════ -->
+    <header class="titlebar">
+      <div class="titlebar-left">
+        <div class="app-logo">
+          <div class="logo-icon"><i data-lucide="sparkles"></i></div>
+          <span class="logo-text">7/24</span>
+          <span class="logo-badge">IDE</span>
+        </div>
+      </div>
+      <div class="titlebar-center">
+        <div class="project-name-display" id="project-name-display-container">
+          <i data-lucide="message-square"></i>
+          <span class="titlebar-window-title" id="titlebar-project-name">Новый проект</span>
+          <button id="btn-rename-active-project" class="ghost-btn tiny" title="Переименовать проект" style="-webkit-app-region: no-drag;"><i data-lucide="pencil"></i></button>
+        </div>
+      </div>
+      <div class="titlebar-right">
+        <div class="window-controls">
+          <button id="btn-window-min" class="window-control-btn" title="Свернуть" aria-label="Свернуть">
+            <i data-lucide="minus"></i>
+          </button>
+          <button id="btn-window-max" class="window-control-btn" title="Развернуть" aria-label="Развернуть">
+            <i data-lucide="square"></i>
+          </button>
+          <button id="btn-window-close" class="window-control-btn close" title="Закрыть" aria-label="Закрыть">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══════════ SETUP BANNER ═══════════ -->
+    <div id="setup-banner" class="setup-banner hidden">
+      <i data-lucide="key"></i>
+      <span>Для начала работы добавьте API-ключ OpenRouter в Настройках</span>
+    </div>
+
+    <!-- ═══════════ MAIN WORKSPACE ═══════════ -->
+    <main class="workspace" id="workspace-view">
+
+      <!-- Left Sidebar (Chats & Workspace) -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <button id="btn-sidebar-new-chat" class="sidebar-new-chat-btn">
+            <i data-lucide="plus"></i>
+            <span>Новый чат</span>
+          </button>
+        </div>
+        
+        <div class="sidebar-search-box hidden" id="sidebar-search-box">
+          <i data-lucide="search"></i>
+          <input type="text" id="sidebar-chat-search" placeholder="Поиск чатов..." />
+        </div>
+        <div class="sidebar-projects-list" id="sidebar-projects-list">
+          <!-- Заполняется динамически через renderer.ts -->
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="sidebar-footer-main">
+            <button id="btn-sidebar-settings" class="sidebar-footer-btn" title="Настройки">
+              <i data-lucide="settings"></i>
+            </button>
+            <div class="sidebar-folder-mini" id="sidebar-folder-mini">
+              <i data-lucide="folder" id="sidebar-folder-icon"></i>
+              <span id="sidebar-folder-path" class="sidebar-folder-path-clickable" title="Папка не выбрана">Папка не выбрана</span>
+              <button id="btn-sidebar-select-folder" class="sidebar-action-btn-mini" title="Выбрать папку">
+                <i data-lucide="folder-open"></i>
+              </button>
+              <button id="btn-sidebar-open-explorer" class="sidebar-action-btn-mini hidden" title="Показать в Проводнике"><i data-lucide="external-link"></i></button>
+              <button id="btn-sidebar-clear-folder" class="sidebar-action-btn-mini hidden" title="Открепить папку"><i data-lucide="x"></i></button>
+            </div>
+            <button id="btn-sidebar-toggle-workspace" class="sidebar-footer-btn hidden" title="Область работы">
+              <i data-lucide="git-branch"></i>
+            </button>
+          </div>
+          <div id="sidebar-workspace-details" class="sidebar-workspace-details hidden">
+            <div id="sidebar-recent-folders" class="sidebar-recent-folders"></div>
+            <div class="sidebar-scope-section" id="sidebar-scope-section">
+              <span class="sidebar-section-title"><i data-lucide="search"></i> Область работы</span>
+              <div class="sidebar-scope-input-wrap">
+                <input type="text" id="sidebar-scope-input" placeholder="например: src/web" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Chat Panel -->
+      <section class="chat-panel" id="chat-panel">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div id="chat-search-bar" class="chat-search-bar hidden">
+          <i data-lucide="search" style="width:14px;height:14px;flex-shrink:0;color:var(--text-muted);"></i>
+          <input type="text" id="chat-search-input" class="chat-search-input" placeholder="Поиск в чате...">
+          <span id="chat-search-count" class="chat-search-count"></span>
+          <button id="chat-search-prev" class="chat-search-nav" title="Предыдущее"><i data-lucide="chevron-up"></i></button>
+          <button id="chat-search-next" class="chat-search-nav" title="Следующее"><i data-lucide="chevron-down"></i></button>
+          <button id="chat-search-close" class="chat-search-close" title="Закрыть (Esc)"><i data-lucide="x"></i></button>
+          <button id="btn-copy-chat" class="chat-search-close" title="Копировать весь чат"><i data-lucide="clipboard-copy"></i></button>
+        </div>
+        <button id="btn-scroll-bottom" class="scroll-bottom-btn hidden" title="Прокрутить вниз"><i data-lucide="chevron-down"></i></button>
+        <div id="chat-gen-indicator" class="chat-gen-indicator hidden">
+          <span class="gen-dot"></span><span class="gen-dot"></span><span class="gen-dot"></span>
+          <span>Генерация...</span>
+        </div>
+        <div id="current-action" class="current-action hidden">
+          <i data-lucide="loader-2" class="action-spinner"></i>
+          <span id="current-action-text"></span>
+        </div>
+        <div class="chat-input-area">
+          <div class="input-context-bar">
+            <div class="chat-model-select-wrap" title="Модель ИИ для этого чата">
+              <i data-lucide="sparkles" style="width:11px;height:11px;color:var(--text-muted);"></i>
+              <select id="chat-model-select" class="chat-model-select"></select>
+            </div>
+            <div class="context-bar-wrap" id="context-bar-wrap">
+              <span class="context-bar-label" id="context-bar-label">0 / 128K</span>
+              <div class="context-bar-track"><div class="context-bar-fill" id="context-bar-fill"></div></div>
+            </div>
+            <div class="context-row-3 hidden" id="selected-component-bar">
+              <span class="context-label"><i data-lucide="tag"></i> <span id="selected-component-name">Компонент не выбран</span></span>
+              <button id="btn-clear-selected-component" class="ghost-btn tiny" style="padding: 2px 4px; display: flex; align-items: center; justify-content: center; height: 16px; width: 16px; border-radius: 50%;" title="Очистить выбор"><i data-lucide="x" style="width: 10px; height: 10px;"></i></button>
+            </div>
+          </div>
+          <div class="input-mode-toggle" id="input-mode-toggle">
+            <button class="mode-tab active" data-mode="build" id="mode-tab-build" title="Build — агент сразу пишет и правит код">
+              <i data-lucide="zap"></i><span>Build</span>
+            </button>
+            <button class="mode-tab" data-mode="plan" id="mode-tab-plan" title="Plan — сначала составить пошаговый план, затем собрать">
+              <i data-lucide="map"></i><span>Plan</span>
+            </button>
+          </div>
+          <div class="attached-files-bar hidden" id="attached-files-bar"></div>
+          <div class="pinned-files-bar hidden" id="pinned-files-bar">
+            <span class="pinned-files-label"><i data-lucide="pin"></i> Закреплено:</span>
+            <div class="pinned-files-list" id="pinned-files-list"></div>
+          </div>
+          <div class="input-wrapper">
+            <textarea id="chat-input" placeholder="Опишите, что хотите создать или исправить..." rows="1"></textarea>
+            <div id="at-references" class="at-references hidden"></div>
+            <button id="btn-stop-generation" class="stop-btn hidden" title="Остановить генерацию">
+              <i data-lucide="square"></i>
+            </button>
+            <button id="btn-send" class="send-btn" title="Отправить (Enter)">
+              <i data-lucide="arrow-up"></i>
+            </button>
+          </div>
+          <div class="input-hint">Нажмите <kbd>Enter</kbd> чтобы отправить, <kbd>Shift+Enter</kbd> для новой строки</div>
+        </div>
+      </section>
+
+      <!-- Resize Handle -->
+      <div class="resize-handle" id="resize-handle"></div>
+
+      <!-- Preview Panel -->
+      <section class="preview-panel">
+        <div class="preview-toolbar">
+          <div class="preview-tabs">
+            <button id="tab-preview" class="ptab active" data-tab="preview" title="Просмотр сгенерированного HTML-приложения"><i data-lucide="eye"></i> Превью</button>
+            <button id="tab-code" class="ptab" data-tab="code" title="Исходный код текущей страницы"><i data-lucide="code-2"></i> Код</button>
+            <button id="tab-files" class="ptab" data-tab="files" title="Файлы в рабочей папке"><i data-lucide="files"></i> Файлы</button>
+            <button id="tab-terminal" class="ptab" data-tab="terminal" title="Живой вывод терминала"><i data-lucide="terminal"></i> Терминал</button>
+            <button id="tab-tasks" class="ptab" data-tab="tasks" title="Список задач плана и прогресс выполнения"><i data-lucide="list-checks"></i> Задачи</button>
+            <button id="tab-snapshots" class="ptab" data-tab="snapshots" title="Визуальный тайм-тревел (Снапшоты проекта)"><i data-lucide="history"></i> Снапшоты</button>
+          </div>
+          <div class="preview-actions">
+            <span id="permission-pending" class="loading-pill permission-pill hidden">
+              <i data-lucide="shield-alert" style="width:14px;height:14px;"></i>
+              <span>Ожидает подтверждения</span>
+            </span>
+            <button id="btn-inspect-element" class="toolbar-action-btn" title="Выбрать элемент (Click-to-Plan)" style="margin-right: 6px;">
+              <i data-lucide="mouse-pointer"></i><span>Инспект</span>
+            </button>
+            <div class="toolbar-divider"></div>
+            <div class="device-toggle">
+              <button class="device-btn active" data-device="desktop" title="Десктоп"><i data-lucide="monitor"></i></button>
+              <button class="device-btn" data-device="tablet" title="Планшет"><i data-lucide="tablet"></i></button>
+              <button class="device-btn" data-device="mobile" title="Телефон"><i data-lucide="smartphone"></i></button>
+            </div>
+            <div class="toolbar-divider"></div>
+            <button id="btn-download" class="toolbar-action-btn" title="Скачать HTML">
+              <i data-lucide="download"></i><span>Скачать</span>
+            </button>
+          </div>
+        </div>
+        <div class="preview-content" id="preview-content">
+          <div class="welcome-state" id="welcome-state">
+            <div class="welcome-icon"><i data-lucide="wand-2"></i></div>
+            <h2>Что вы хотите создать?</h2>
+            <p>Опишите вашу идею в чате — ИИ-агент мгновенно превратит её в работающее приложение.</p>
+            <div class="welcome-folder-prompt" id="welcome-folder-prompt" style="margin-bottom: var(--space-5); background: var(--bg-panel-alt); padding: 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); max-width: 460px; width: 100%;">
+              <p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: 12px; line-height: 1.45;">
+                ⚠️ Для работы ИИ-агента необходимо выбрать рабочую папку на вашем компьютере:
+              </p>
+              <button id="btn-welcome-select-folder" class="primary-btn">
+                <i data-lucide="folder-open"></i><span>Выбрать рабочую папку</span>
+              </button>
+            </div>
+            <div class="welcome-examples">
+              <button class="example-chip" data-prompt="Создай красивый калькулятор с тёмной темой и плавными анимациями кнопок"><i data-lucide="calculator"></i> Калькулятор</button>
+              <button class="example-chip" data-prompt="Создай современный лендинг для кофейни «Аромат» с hero-секцией, меню и формой обратной связи"><i data-lucide="store"></i> Лендинг</button>
+              <button class="example-chip" data-prompt="Создай Kanban-доску для задач с колонками: «Сделать», «В работе», «Готово» и перетаскиванием карточек"><i data-lucide="trello"></i> Канбан</button>
+              <button class="example-chip" data-prompt="Создай аналоговые часы с минималистичным дизайном, показывающие текущее время с плавной секундной стрелкой"><i data-lucide="clock"></i> Часы</button>
+              <button class="example-chip" data-prompt="Создай дашборд погоды с 5-дневным прогнозом, иконками, графиками температуры и поиском по городам"><i data-lucide="cloud-sun"></i> Погода</button>
+              <button class="example-chip" data-prompt="Создай сайт-портфолио с анимированным hero, галереей проектов, секцией навыков и формой контактов"><i data-lucide="user"></i> Портфолио</button>
+            </div>
+          </div>
+          <div class="iframe-wrapper" id="iframe-wrapper" style="display:none; position: relative; width: 100%; height: 100%;">
+            <div id="ghost-ui-overlay" class="ghost-ui-overlay hidden">
+              <div class="ghost-header">
+                <div class="ghost-bar"></div>
+              </div>
+              <div class="ghost-body">
+                <div class="ghost-sidebar">
+                  <div class="ghost-line"></div>
+                  <div class="ghost-line"></div>
+                  <div class="ghost-line"></div>
+                </div>
+                <div class="ghost-content">
+                  <div class="ghost-title-block"></div>
+                  <div class="ghost-card"></div>
+                  <div class="ghost-card"></div>
+                  <div class="ghost-card"></div>
+                </div>
+              </div>
+            </div>
+            <iframe id="preview-iframe" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+          </div>
+          <div class="code-view" id="code-view" style="display:none;">
+            <div class="code-header">
+              <span><i data-lucide="file-code"></i> Просмотр кода</span>
+              <button id="btn-copy-code" class="ghost-btn"><i data-lucide="copy"></i> Копировать</button>
+            </div>
+            <pre class="code-block"><code id="code-display"></code></pre>
+          </div>
+          <div class="files-view" id="files-view" style="display:none;">
+            <div class="files-header">
+              <span><i data-lucide="folder-open"></i> Рабочая папка: <span id="files-workspace-path">Не выбрана</span></span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button id="btn-files-open-explorer" class="ghost-btn" title="Показать в Проводнике" style="display: none;"><i data-lucide="external-link"></i><span>Проводник</span></button>
+                <button id="btn-refresh-files" class="ghost-btn"><i data-lucide="refresh-cw"></i><span>Обновить</span></button>
+              </div>
+            </div>
+            <div class="files-list" id="files-list">
+              <!-- Будет заполнено через renderer.ts -->
+            </div>
+          </div>
+          <div class="terminal-view" id="terminal-view" style="display:none;">
+            <div class="terminal-header">
+              <span><i data-lucide="terminal"></i> Терминал</span>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <span id="terminal-status" class="terminal-status"></span>
+                <button id="btn-clear-terminal" class="ghost-btn" title="Очистить"><i data-lucide="eraser"></i><span>Очистить</span></button>
+              </div>
+            </div>
+            <div class="terminal-output" id="terminal-output"><div class="terminal-empty">Здесь появляется живой вывод команд, которые запускает агент.</div></div>
+          </div>
+          <div class="tasks-view" id="tasks-view" style="display:none;">
+            <div class="tasks-header">
+              <span><i data-lucide="list-checks"></i> Задачи</span>
+              <span id="tasks-progress-label" class="tasks-progress-label"></span>
+            </div>
+            <div class="tasks-progress-track"><div class="tasks-progress-fill" id="tasks-progress-fill"></div></div>
+            <div class="tasks-list" id="tasks-list">
+              <!-- Заполняется через renderer.ts -->
+            </div>
+          </div>
+          <div class="snapshots-view" id="snapshots-view" style="display:none;">
+            <div class="snapshots-header">
+              <span><i data-lucide="history"></i> Визуальный тайм-тревел (Снапшоты)</span>
+              <button id="btn-create-snapshot" class="secondary-btn"><i data-lucide="camera"></i> Создать веху</button>
+            </div>
+            <div class="snapshots-list" id="snapshots-list">
+              <!-- Будет заполнено через renderer.ts -->
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ═══════════ FULL-PAGE SETTINGS ═══════════ -->
+    <div class="settings-page hidden" id="settings-page">
+      
+      <!-- Settings Sidebar -->
+      <nav class="settings-sidebar">
+        <div class="settings-sidebar-group">
+          <span class="settings-sidebar-label">Приложение</span>
+          <button class="settings-nav-btn active" data-section="general"><i data-lucide="sliders-horizontal"></i> Основные</button>
+          <button class="settings-nav-btn" data-section="appearance"><i data-lucide="palette"></i> Внешний вид</button>
+          <button class="settings-nav-btn" data-section="hotkeys"><i data-lucide="keyboard"></i> Горячие клавиши</button>
+          <button class="settings-nav-btn" data-section="permissions"><i data-lucide="shield-check"></i> Разрешения</button>
+        </div>
+        <div class="settings-sidebar-group">
+          <span class="settings-sidebar-label">Сервер</span>
+          <button class="settings-nav-btn" data-section="provider"><i data-lucide="server"></i> Провайдер</button>
+          <button class="settings-nav-btn" data-section="models"><i data-lucide="sparkles"></i> Модели</button>
+        </div>
+        <div class="settings-sidebar-group">
+          <span class="settings-sidebar-label">Интеллект Ассистента</span>
+          <button class="settings-nav-btn" data-section="profile"><i data-lucide="brain-circuit"></i> Профиль и Навыки</button>
+        </div>
+        <div class="settings-sidebar-group">
+          <span class="settings-sidebar-label">Информация</span>
+          <button class="settings-nav-btn" data-section="about"><i data-lucide="info"></i> О программе</button>
+        </div>
+        <div class="settings-sidebar-footer">
+          <span class="settings-version">7/24 IDE v1.0.0</span>
+        </div>
+      </nav>
+
+      <!-- Settings Content -->
+      <div class="settings-content">
+        <div class="settings-content-header">
+          <button id="btn-close-settings" class="ghost-btn"><i data-lucide="arrow-left"></i> Назад</button>
+          <button id="btn-save-settings" class="secondary-btn" style="margin-left:auto;"><i data-lucide="check"></i> Сохранить и закрыть</button>
+        </div>
+
+        <!-- ── General ── -->
+        <div class="settings-section-page active" data-section="general">
+          <h2>Основные</h2>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Язык</span>
+              <span class="setting-desc">Язык интерфейса приложения</span>
+            </div>
+            <select id="s-language" class="setting-select">
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Показывать примеры на стартовом экране</span>
+              <span class="setting-desc">Отображать карточки с примерами проектов на приветственном экране</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="s-show-examples" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Индикатор генерации</span>
+              <span class="setting-desc">Показывать анимированный индикатор вверху, когда агент работает</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="s-show-loading" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Авто-чекпоинты перед изменениями</span>
+              <span class="setting-desc">Перед каждым запросом агента автоматически сохранять состояние файлов, чтобы можно было откатиться через вкладку «Снапшоты»</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="s-auto-checkpoint" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Звуковые уведомления</span>
+              <span class="setting-desc">Воспроизводить звук, когда агент завершил генерацию</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="s-sounds">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- ── Appearance ── -->
+        <div class="settings-section-page" data-section="appearance">
+          <h2>Внешний вид</h2>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Цветовая схема</span>
+              <span class="setting-desc">Выберите светлую или тёмную тему</span>
+            </div>
+            <select id="s-theme" class="setting-select">
+              <option value="light">Светлая</option>
+              <option value="dark">Тёмная</option>
+              <option value="system">Системная</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Шрифт интерфейса</span>
+              <span class="setting-desc">Настройте шрифт, используемый во всём интерфейсе</span>
+            </div>
+            <select id="s-ui-font" class="setting-select">
+              <option value="Inter">Inter</option>
+              <option value="system-ui">System Sans</option>
+              <option value="Segoe UI">Segoe UI</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Шрифт кода</span>
+              <span class="setting-desc">Настройте шрифт, используемый в блоках кода</span>
+            </div>
+            <select id="s-code-font" class="setting-select">
+              <option value="JetBrains Mono">JetBrains Mono</option>
+              <option value="Fira Code">Fira Code</option>
+              <option value="Consolas">Consolas</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Размер шрифта</span>
+              <span class="setting-desc">Размер текста в интерфейсе</span>
+            </div>
+            <select id="s-font-size" class="setting-select">
+              <option value="12">12px</option>
+              <option value="13" selected>13px</option>
+              <option value="14">14px</option>
+              <option value="15">15px</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- ── Hotkeys ── -->
+        <div class="settings-section-page" data-section="hotkeys">
+          <h2>Горячие клавиши</h2>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Отправить сообщение</span>
+              <span class="setting-desc">Отправить текущее сообщение агенту</span>
+            </div>
+            <kbd class="hotkey-display">Enter</kbd>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Новая строка</span>
+              <span class="setting-desc">Перенос строки в поле ввода</span>
+            </div>
+            <kbd class="hotkey-display">Shift + Enter</kbd>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Новый чат</span>
+              <span class="setting-desc">Создать новый проект</span>
+            </div>
+            <kbd class="hotkey-display">Ctrl + N</kbd>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Настройки</span>
+              <span class="setting-desc">Открыть страницу настроек</span>
+            </div>
+            <kbd class="hotkey-display">Ctrl + ,</kbd>
+          </div>
+        </div>
+
+        <!-- ── Permissions ── -->
+        <div class="settings-section-page" data-section="permissions">
+          <h2>Разрешения и безопасность</h2>
+          <p class="section-intro">Настройте права доступа ИИ-агента к вашему компьютеру. Это гарантирует безопасность при работе с кодом и запуске команд.</p>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Ограничить файлы рабочей папкой (Песочница)</span>
+              <span class="setting-desc">Агент сможет читать и писать файлы ТОЛЬКО внутри выбранной рабочей папки (Рекомендуется)</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="s-sandbox-enabled" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Чтение файлов</span>
+              <span class="setting-desc">Разрешить агенту читать файлы на вашем компьютере</span>
+            </div>
+            <select id="s-perm-read" class="setting-select">
+              <option value="auto">Всегда разрешать</option>
+              <option value="ask" selected>Запрашивать разрешение</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Запись файлов и Авто-Ревью</span>
+              <span class="setting-desc">Настройка записи файлов агентом. Авто-Ревью показывает разницу (diff) перед записью.</span>
+            </div>
+            <select id="s-perm-write" class="setting-select">
+              <option value="review" selected>Спрашивать с Ревью диффа</option>
+              <option value="auto">Всегда записывать без спроса</option>
+              <option value="ask">Просто запрашивать согласие</option>
+              <option value="deny">Запретить запись</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Запуск терминальных команд</span>
+              <span class="setting-desc">Выполнение команд в терминале компьютера</span>
+            </div>
+            <select id="s-perm-exec" class="setting-select">
+              <option value="ask" selected>Спрашивать перед запуском</option>
+              <option value="deny">Запретить выполнение</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- ── Provider ── -->
+        <div class="settings-section-page" data-section="provider">
+          <h2>Провайдер</h2>
+          <p class="section-intro">Для работы приложения необходим API-ключ. Зарегистрируйтесь на <a href="https://openrouter.ai" target="_blank">openrouter.ai</a> — это единый шлюз ко всем моделям ИИ (GPT-4o, Claude, Gemini, Llama и другие).</p>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">API-ключ OpenRouter</span>
+              <span class="setting-desc">Ваш ключ хранится локально и никуда не передаётся кроме OpenRouter</span>
+            </div>
+            <div class="setting-input-group">
+              <input type="password" id="s-api-key" class="setting-input" placeholder="sk-or-v1-..." />
+              <button id="btn-toggle-key" class="ghost-btn tiny"><i data-lucide="eye"></i></button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Статус подключения</span>
+              <span class="setting-desc" id="provider-status">Не подключен</span>
+            </div>
+            <button id="btn-test-connection" class="secondary-btn">Проверить</button>
+          </div>
+        </div>
+
+        <!-- ── Models ── -->
+        <div class="settings-section-page" data-section="models">
+          <h2>Модели</h2>
+          <p class="section-intro">Выберите модель ИИ для генерации кода. Модели загружаются автоматически из OpenRouter после ввода API-ключа.</p>
+
+          <div class="setting-row vertical">
+            <div class="setting-info">
+              <span class="setting-title">Модель по умолчанию</span>
+              <span class="setting-desc" id="models-status">Введите API-ключ для загрузки моделей</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; min-width:240px;">
+              <select id="s-model" class="setting-select" disabled>
+                <option value="">Сначала введите API-ключ...</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Обновить список моделей</span>
+              <span class="setting-desc">Перезагрузить доступные модели с OpenRouter</span>
+            </div>
+            <button id="btn-refresh-models" class="secondary-btn"><i data-lucide="refresh-cw"></i> Обновить</button>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Резервная модель</span>
+              <span class="setting-desc">Если основная модель недоступна, агент попробует выполнить шаг через эту модель.</span>
+            </div>
+            <select id="s-fallback-model" class="setting-select">
+              <option value="">— нет —</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Креативность (temperature)</span>
+              <span class="setting-desc">Ниже — точнее и предсказуемее, выше — креативнее. Для кода рекомендуется 0.1–0.3.</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; min-width:180px;">
+              <input type="range" id="s-temperature" min="0" max="1" step="0.05" value="0.2" style="flex:1;">
+              <span id="s-temperature-val" style="font-variant-numeric:tabular-nums; font-weight:600; min-width:32px; text-align:right;">0.2</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Максимум токенов ответа</span>
+              <span class="setting-desc">Ограничение длины одного ответа модели. Больше — длиннее ответы, выше расход.</span>
+            </div>
+            <select id="s-max-tokens" class="setting-select">
+              <option value="2048">2048</option>
+              <option value="4096" selected>4096</option>
+              <option value="8192">8192</option>
+              <option value="16384">16384</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- ── Cognitive Settings ── -->
+        <div class="settings-section-page" data-section="profile">
+          <h2>Интеллект Ассистента</h2>
+          <p class="section-intro">Ассистент анализирует ваше поведение, запоминает ваши предпочтения в коде и создаёт новые навыки на основе рефлексии завершенных проектов.</p>
+
+          <div class="settings-section">
+            <h4>Модель пользователя (User Modeling)</h4>
+            <div class="form-field">
+              <label for="s-profile-style">Предпочитаемый стиль кода</label>
+              <textarea id="s-profile-style" class="setting-textarea" rows="2" placeholder="Например: Функциональный React, отступы 2 пробела, чистый код без лишних комментариев..."></textarea>
+              <div class="field-hint">Ассистент обновляет этот профиль автоматически на основе ваших сообщений. Вы можете изменить его вручную.</div>
+            </div>
+            <div class="form-field">
+              <label for="s-profile-libs">Используемые библиотеки и фреймворки</label>
+              <input type="text" id="s-profile-libs" class="setting-input" placeholder="Например: react, tailwindcss, typescript, sqlite" />
+              <div class="field-hint">Список библиотек через запятую, которые агент будет предпочитать при разработке.</div>
+            </div>
+            <div class="form-field">
+              <label for="s-profile-notes">Дополнительные примечания</label>
+              <textarea id="s-profile-notes" class="setting-textarea" rows="2" placeholder="Например: Писать комментарии к коду исключительно на русском языке..."></textarea>
+            </div>
+          </div>
+
+          <div class="settings-section" style="margin-top: 24px;">
+            <h4>Системный промпт</h4>
+            <p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: 12px;">
+              Дополнительные правила, которые будут добавлены к стандартному системному промпту агента (для всех режимов). Оставьте пустым, чтобы использовать поведение по умолчанию.
+            </p>
+            <div class="form-field">
+              <textarea id="s-system-prompt" class="setting-textarea" rows="6" placeholder="Например: Всегда добавляй комментарии Doxygen к публичным функциям. Не используй React, предпочитай ванильный TypeScript..."></textarea>
+            </div>
+          </div>
+
+          <div class="settings-section" style="margin-top: 24px;">
+            <h4>Самописные навыки (Self-Evolving Skills)</h4>
+            <p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: 12px;">
+              Список навыков, которые агент автоматически сформулировал в фазах рефлексии после успешного выполнения планов.
+            </p>
+            <div id="profile-skills-list" class="profile-skills-list-container">
+              <!-- Заполняется динамически -->
+            </div>
+          </div>
+        </div>
+
+        <!-- ── About ── -->
+        <div class="settings-section-page" data-section="about">
+          <h2>О программе</h2>
+
+          <div class="about-card">
+            <div class="about-logo">
+              <div class="logo-icon large"><i data-lucide="sparkles"></i></div>
+              <div>
+                <h3>7/24 IDE</h3>
+                <span>v1.0.0</span>
+              </div>
+            </div>
+            <p>7/24 IDE — создание приложений с помощью ИИ-агента. Просто опишите — и агент построит.</p>
+            <div class="about-links">
+              <a href="https://openrouter.ai" target="_blank"><i data-lucide="external-link"></i> OpenRouter</a>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Очистить все данные</span>
+              <span class="setting-desc">Удалить все проекты, историю чатов и настройки</span>
+            </div>
+            <button id="btn-clear-all-data" class="danger-btn">Очистить</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="../dist/renderer.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+</html>

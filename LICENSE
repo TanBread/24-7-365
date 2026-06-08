@@ -1,0 +1,57 @@
+7/24 IDE — End User License Agreement
+
+Copyright (c) 2026 7/24 IDE. All rights reserved.
+
+By installing or using this software ("the Software") you agree to the
+following terms:
+
+1. GRANT OF LICENSE
+   The publisher grants you a personal, non-exclusive, non-transferable
+   license to install and use the Software on any number of devices you
+   own or control, free of charge.
+
+2. RESTRICTIONS
+   You may not:
+   - sell, rent, lease or sublicense the Software;
+   - remove or alter copyright notices or branding;
+   - use the Software for any unlawful purpose or in violation of
+     applicable laws.
+
+3. THIRD-PARTY SERVICES
+   The Software connects to external AI providers (OpenRouter and the
+   underlying model vendors) using credentials you supply. Your use of
+   those services is subject to their own terms and pricing. The
+   publisher is not responsible for charges, content, or availability of
+   third-party services.
+
+4. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. THE SOFTWARE INTERACTS WITH YOUR FILE SYSTEM AND CAN
+   EXECUTE SHELL COMMANDS WITH YOUR PERMISSION; YOU ARE RESPONSIBLE FOR
+   REVIEWING ITS ACTIONS BEFORE APPROVING THEM.
+
+5. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL THE PUBLISHER BE LIABLE FOR ANY CLAIM, DAMAGES OR
+   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+   OTHER DEALINGS IN THE SOFTWARE.
+
+6. DATA AND PRIVACY
+   The Software stores all your projects, conversations, settings and
+   API keys locally on your machine. The API key is encrypted at rest
+   using your operating system's keychain (Windows DPAPI). No telemetry
+   is sent to the publisher.
+
+7. UNINSTALLATION
+   You may uninstall the Software at any time. By default user data
+   under %APPDATA%\7-24 IDE remains after uninstallation so you can
+   reinstall without losing work; you may delete this folder manually.
+
+8. TERMINATION
+   This license terminates automatically if you fail to comply with the
+   terms above.
+
+If you do not agree with these terms, do not install or use the
+Software.

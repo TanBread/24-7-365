@@ -1,0 +1,18 @@
+{
+  "name": "seven24-ide",
+  "version": "1.0.0",
+  "description": "Desktop AI coding agent. Describe what you want to build — the agent reads your files, writes code, runs commands, and shows the result.",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "workspaces": [
+    "desktop-gui"
+  ],
+  "scripts": {
+    "build:frontend": "cd desktop-gui && npm run build",
+    "install:gui": "npm install --workspace=desktop-gui",
+    "dist:installer": "npm run --workspace=desktop-gui dist",
+    "dist:portable": "npm run --workspace=desktop-gui dist:portable",
+    "start": "npm run build:frontend && cd desktop-gui && npm run start",
+    "test": "npm test --workspace=desktop-gui"
+  }
+}
