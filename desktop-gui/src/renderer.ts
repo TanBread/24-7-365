@@ -1039,6 +1039,27 @@ function extractToolResults(systemContent: string): string[] {
 }
 
 function parseMarkdown(text: string): string {
+  let tempText = text;
+
+  // Extract <think> block if present (case-insensitive)
+  let thinkHtml = '';
+  const thinkMatch = tempText.match(/<think>([\s\S]*?)(?:<\/think>|$)/i);
+  if (thinkMatch) {
+    const thinkContent = thinkMatch[1].trim();
+    if (thinkContent) {
+      thinkHtml = `
+        <div class="reasoning-block">
+          <div class="reasoning-header">
+            <i data-lucide="brain"></i>
+            <span>Размышления</span>
+          </div>
+          <div class="reasoning-content">${esc(thinkContent)}</div>
+        </div>
+      `;
+    }
+    tempText = tempText.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '');
+  }
+
   // Extract XML tool tags so they don't get messed up by HTML escaping or markdown formatting
   const toolPlaceholders: string[] = [];
   const storePlaceholder = (tagHtml: string) => {
@@ -1046,8 +1067,6 @@ function parseMarkdown(text: string): string {
     toolPlaceholders.push(tagHtml);
     return id;
   };
-
-  let tempText = text;
 
   // Regexes matching the exact tool tags (allows unclosed tags during streaming)
   const readDirRegex = /<read_dir\s+path="([^"]+)"\s*(?:\/>|>\s*<\/read_dir>)/g;
@@ -1207,7 +1226,7 @@ function parseMarkdown(text: string): string {
     parsedHtml = parsedHtml.replace(`%%TOOLPLACEHOLDER${i}%%`, toolPlaceholders[i]);
   }
 
-  return parsedHtml;
+  return thinkHtml + parsedHtml;
 }
 
 function highlightCode(code: string, lang: string): string {
@@ -1588,7 +1607,23 @@ function renderChatHistory() {
       const div = document.createElement('div');
       div.className = 'chat-message ai';
       
-      let formattedText = parseMarkdown(msg.content);
+      let formattedText = '';
+      if ((msg as any).reasoningContent) {
+        const escapedReasoning = esc((msg as any).reasoningContent).trim();
+        if (escapedReasoning) {
+          formattedText += `
+            <div class="reasoning-block">
+              <div class="reasoning-header">
+                <i data-lucide="brain"></i>
+                <span>Размышления</span>
+              </div>
+              <div class="reasoning-content">${escapedReasoning}</div>
+            </div>
+          `;
+        }
+      }
+      
+      formattedText += parseMarkdown(msg.content);
       formattedText = formatToolTags(formattedText, true, toolResults);
       
       const actionsHtml = buildMsgActions(true);
@@ -3424,7 +3459,11 @@ async function runAgentStep() {
     }
     
     // Log assistant reply
-    activeProject!.chatHistory.push({ role: 'assistant', content: result.content });
+    activeProject!.chatHistory.push({
+      role: 'assistant',
+      content: result.content,
+      reasoningContent: result.reasoningContent
+    });
     saveProjects();
 
     const tools = (result as any).nativeTools && (result as any).nativeTools.length > 0
@@ -3596,7 +3635,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
   const bubble = document.createElement('div');
   bubble.className = 'chat-message ai streaming';
   bubble.innerHTML = `
-    <div class="message-text stream-text"></div>
+    <div class="message-text stream-text"><span class="stream-cursor">|</span></div>
     <div class="msg-bottom hidden">
       ${buildMsgActions(true)}
     </div>
@@ -3607,6 +3646,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
   refreshIcons();
 
   let fullContent = '';
+  let fullReasoning = '';
   // Accumulator for native tool_calls (OpenAI/Anthropic-style streaming).
   // Streaming sends fragments — we merge them by index.
   const toolCallsAcc: { id: string; name: string; argsRaw: string }[] = [];
@@ -3656,10 +3696,15 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
       body: JSON.stringify(getLLMBody({
         model,
         messages: messages.map((m: any, i: number) => {
-          if (m.role === 'system' && i === 0 && model.includes('anthropic')) {
-            return { ...m, cache_control: { type: 'ephemeral' } };
+          const cleanMsg: any = { role: m.role, content: m.content };
+          if (m.name) cleanMsg.name = m.name;
+          if (m.tool_calls) cleanMsg.tool_calls = m.tool_calls;
+          if (m.tool_call_id) cleanMsg.tool_call_id = m.tool_call_id;
+          
+          if (cleanMsg.role === 'system' && i === 0 && model.includes('anthropic')) {
+            cleanMsg.cache_control = { type: 'ephemeral' };
           }
-          return m;
+          return cleanMsg;
         }),
         // Native function calling: OpenRouter forwards `tools` to compatible
         // models. Models without tool support simply ignore this field and
@@ -3727,7 +3772,9 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
             }
           }
 
-          if (delta.reasoning_content) {
+          const reasoning = delta.reasoning_content || delta.reasoning || delta.thought;
+          if (reasoning) {
+            fullReasoning += reasoning;
             let reasoningBlock = bubble.querySelector('.reasoning-block') as HTMLElement | null;
             if (!reasoningBlock) {
               reasoningBlock = document.createElement('div');
@@ -3739,20 +3786,18 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
                 </div>
                 <div class="reasoning-content"></div>
               `;
-              reasoningBlock.querySelector('.reasoning-header')?.addEventListener('click', () => {
-                reasoningBlock!.classList.toggle('collapsed');
-              });
               bubble.querySelector('.stream-text')?.before(reasoningBlock);
               refreshIcons();
             }
             const reasoningContent = reasoningBlock.querySelector('.reasoning-content');
             if (reasoningContent) {
-              reasoningContent.textContent = (reasoningContent.textContent || '') + delta.reasoning_content;
+              reasoningContent.textContent = (reasoningContent.textContent || '') + reasoning;
             }
             scrollToBottom();
           }
         } catch (e) {
-          // Skip unparseable chunks
+          // Skip unparseable chunks but log in console for debugging
+          console.error('[Stream error/warn] Unparseable SSE chunk:', e, data);
         }
       }
     }
@@ -3823,6 +3868,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
 
   return {
     content: fullContent,
+    reasoningContent: fullReasoning || undefined,
     nativeTools,
     usage: usage.prompt_tokens ? { prompt_tokens: usage.prompt_tokens, completion_tokens: usage.completion_tokens || 0 } : undefined
   };
@@ -5799,6 +5845,15 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
       const accordion = header.closest('.tool-accordion');
       if (accordion) {
         accordion.classList.toggle('expanded');
+      }
+    }
+    
+    // Reasoning Header Collapse/Expand Delegate Listener
+    const reasoningHeader = (e.target as HTMLElement).closest('.reasoning-header');
+    if (reasoningHeader) {
+      const reasoningBlock = reasoningHeader.closest('.reasoning-block');
+      if (reasoningBlock) {
+        reasoningBlock.classList.toggle('collapsed');
       }
     }
     // Message action buttons
