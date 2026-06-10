@@ -4,6 +4,15 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.3.2] - 2026-06-10
+
+This hotfix release restores the original light branding icon and bumps the internal version tracker.
+
+### Fixed
+*   **Branding:** Restored the original white application icon across the root workspace, documentation assets, and the installer compilation to match the classic look from v1.2.2.
+
+---
+
 ## [1.3.1] - 2026-06-10
 
 This hotfix release adds a provider header to the top of the model selection dropdown.
