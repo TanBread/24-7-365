@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>7/24 IDE — Автономный локальный ИИ-разработчик для Windows</title>
+  <title>7/24 IDE — Autonomous Local AI Developer for Windows</title>
   
   <!-- SEO Metadata -->
-  <meta name="description" content="Создавайте приложения, исправляйте ошибки и запускайте терминальные команды на вашем ПК силами автономного ИИ-агента. 7/24 IDE — это безопасный локальный воркспейс с авто-снапшотами и живым превью.">
-  <meta name="keywords" content="7/24 IDE, AI coding agent, ИИ разработчик, искусственный интеллект, Windows IDE, AI программист, OpenRouter, Claude, GPT, автоматическое программирование">
+  <meta name="description" content="Build applications, fix bugs, and run terminal commands on your PC using an autonomous AI agent. 7/24 IDE is a secure local workspace with auto-checkpoints and a live preview.">
+  <meta name="keywords" content="7/24 IDE, AI coding agent, AI developer, artificial intelligence, Windows IDE, AI programmer, OpenRouter, Claude, GPT, autonomous coding">
   <meta name="author" content="strmax195-hue">
   
   <!-- Fonts -->
@@ -36,15 +36,15 @@
       </div>
       
       <ul class="nav-links">
-        <li><a href="#features" class="nav-link">Преимущества</a></li>
-        <li><a href="#simulator" class="nav-link">Как это работает</a></li>
-        <li><a href="#safety" class="nav-link">Безопасность</a></li>
-        <li><a href="#quickstart" class="nav-link">Быстрый старт</a></li>
+        <li><a href="#features" class="nav-link">Features</a></li>
+        <li><a href="#simulator" class="nav-link">How It Works</a></li>
+        <li><a href="#safety" class="nav-link">Safety & Privacy</a></li>
+        <li><a href="#quickstart" class="nav-link">Quick Start</a></li>
       </ul>
       
       <div class="nav-actions">
         <a href="https://github.com/strmax195-hue/7-24-IDE/releases/latest" class="btn-primary btn-nav-download" id="nav-download-link">
-          <i data-lucide="download"></i><span>Скачать v1.1.0</span>
+          <i data-lucide="download"></i><span>Download v1.1.0</span>
         </a>
       </div>
     </div>
@@ -55,26 +55,26 @@
     <div class="hero-container">
       <div class="hero-badge">
         <i data-lucide="sparkles"></i>
-        <span>Релиз v1.1.0 доступен для скачивания</span>
+        <span>Release v1.1.0 is now available for download</span>
       </div>
       
-      <h1 class="hero-title">Стройте приложения силами<br><span class="gradient-text">автономного ИИ-разработчика</span></h1>
+      <h1 class="hero-title">Build applications using<br><span class="gradient-text">an autonomous AI developer</span></h1>
       
       <p class="hero-subtitle">
-        7/24 IDE — это полноценный локальный воркспейс для Windows. Опишите свою идею в чате, и агент сам прочитает файлы, напишет код, установит зависимости и покажет готовый результат в интерактивном превью.
+        7/24 IDE is a complete, local workspace for Windows. Describe your idea in the chat, and the agent will read files, write code, install dependencies, and run commands—showing the result in an interactive live preview.
       </p>
       
       <div class="hero-ctas">
         <a href="https://github.com/strmax195-hue/7-24-IDE/releases/download/v1.1.0/7-24-IDE-Setup-1.1.0.exe" class="btn-primary btn-large" id="hero-download-btn">
           <i data-lucide="download"></i>
           <div>
-            <span class="btn-title">Скачать для Windows</span>
-            <span class="btn-subtitle">v1.1.0 · EXE Установщик (79 МБ)</span>
+            <span class="btn-title">Download for Windows</span>
+            <span class="btn-subtitle">v1.1.0 · EXE Installer (79 MB)</span>
           </div>
         </a>
         <a href="https://github.com/strmax195-hue/7-24-IDE" target="_blank" class="btn-secondary btn-large">
           <i data-lucide="github"></i>
-          <span>Открыть исходный код</span>
+          <span>View Source on GitHub</span>
         </a>
       </div>
       
@@ -99,51 +99,51 @@
   <section class="features-section" id="features">
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Создан для эффективной сборки</h2>
-        <p class="section-subtitle">В отличие от закрытых облачных песочниц, 7/24 IDE работает непосредственно в выбранной вами папке на вашем компьютере.</p>
+        <h2 class="section-title">Engineered for High-Velocity Building</h2>
+        <p class="section-subtitle">Unlike closed cloud sandboxes, 7/24 IDE works directly in your chosen folder on your local machine.</p>
       </div>
       
       <div class="features-grid">
         <!-- Feature 1: Real Commands -->
         <div class="feature-card" id="feat-terminal">
           <div class="feature-icon"><i data-lucide="terminal"></i></div>
-          <h3>Прямой доступ к терминалу</h3>
-          <p>Агент может запускать компиляцию, производить установку библиотек через `npm install`, настраивать базы данных и запускать скрипты сборки.</p>
+          <h3>Direct Terminal Access</h3>
+          <p>The agent can run compilers, install libraries via <code>npm install</code>, configure databases, and execute custom build scripts directly in your project folder.</p>
         </div>
         
         <!-- Feature 2: Safety -->
         <div class="feature-card" id="feat-safety">
           <div class="feature-icon"><i data-lucide="shield-check"></i></div>
-          <h3>Абсолютная безопасность</h3>
-          <p>Вы полностью контролируете действия ИИ. Настройте разрешения для чтения файлов, записи кода (с Ревью диффа перед записью) и запуска команд.</p>
+          <h3>Absolute Safety</h3>
+          <p>You have complete control over the AI. Configure custom permission thresholds for file reads, code writes, and command executions.</p>
         </div>
         
         <!-- Feature 3: Visual Snapshots -->
         <div class="feature-card" id="feat-history">
           <div class="feature-icon"><i data-lucide="history"></i></div>
-          <h3>Снапшоты и Откат в один клик</h3>
-          <p>Перед каждым шагом агент создает автоматическую точку восстановления файлов. Вы всегда можете мгновенно откатить весь проект назад.</p>
+          <h3>One-Click Rollbacks</h3>
+          <p>Before every action, the agent takes a silent snapshot of your workspace. You can instantly roll back the entire project files to any previous step.</p>
         </div>
 
         <!-- Feature 4: Custom Models -->
         <div class="feature-card" id="feat-models">
           <div class="feature-icon"><i data-lucide="star"></i></div>
-          <h3>Закрепление любимых моделей</h3>
-          <p>Отмечайте звёздочкой до 3-х лучших моделей OpenRouter и мгновенно переключайтесь между ними с помощью кликабельных кнопок-тегов над чатом.</p>
+          <h3>Favorite Models</h3>
+          <p>Star up to 3 preferred OpenRouter models to toggle them instantly using clickable quick-select buttons right above the chat input.</p>
         </div>
 
         <!-- Feature 5: External window preview -->
         <div class="feature-card" id="feat-preview">
           <div class="feature-icon"><i data-lucide="external-link"></i></div>
-          <h3>Превью в отдельном окне</h3>
-          <p>Открывайте живое интерактивное превью вашего HTML-приложения во внешнем независимом окне, которое автоматически обновляется при редактировании кода.</p>
+          <h3>External Window Preview</h3>
+          <p>Open a live interactive preview of your HTML application in an external, independent window that automatically updates as you compile changes.</p>
         </div>
 
         <!-- Feature 6: Privacy First -->
         <div class="feature-card" id="feat-privacy">
           <div class="feature-icon"><i data-lucide="lock"></i></div>
-          <h3>Локально и приватно</h3>
-          <p>Ваши проекты, переписка с ИИ и API-ключ хранятся локально на вашем ПК. Ключ шифруется системным хранилищем Windows DPAPI.</p>
+          <h3>Local & Privacy-First</h3>
+          <p>Your files, projects, chats, and configurations are stored locally on your PC. Your OpenRouter API key is securely encrypted using Windows DPAPI.</p>
         </div>
       </div>
     </div>
@@ -153,8 +153,8 @@
   <section class="simulator-section" id="simulator">
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Как работает автономная разработка</h2>
-        <p class="section-subtitle">Посмотрите интерактивный процесс того, как агент принимает задачу и последовательно доводит её до рабочего результата.</p>
+        <h2 class="section-title">Watch the AI Agent in Action</h2>
+        <p class="section-subtitle">Observe this step-by-step interactive simulation of the developer agent taking a user prompt and building it into a working product.</p>
       </div>
 
       <div class="simulator-box">
@@ -163,26 +163,25 @@
           <div class="sim-panel-header">
             <div class="sim-avatar"><i data-lucide="sparkles"></i></div>
             <div class="sim-header-info">
-              <span class="sim-title">Ассистент 7/24 IDE</span>
-              <span class="sim-status">онлайн</span>
+              <span class="sim-title">7/24 IDE Assistant</span>
+              <span class="sim-status">online</span>
             </div>
           </div>
           
           <div class="sim-chat-area" id="sim-chat-area">
-            <!-- Simulated messages will inject here via CSS and JS -->
             <div class="sim-bubble sim-bubble-user animate-msg-1">
-              <strong>Вы:</strong> Создай красивый виджет прогноза погоды с поиском по городам и плавной анимацией графиков.
+              <strong>You:</strong> Create a beautiful weather forecast widget with city search and smooth animated charts.
             </div>
             
             <div class="sim-bubble sim-bubble-agent animate-msg-2">
-              <strong>Ассистент:</strong> Принято! Я составлю план разработки виджета погоды. Для этого мне понадобятся: index.html с версткой, styles.css для стилей и script.js для получения данных. Начинаю сборку.
+              <strong>Assistant:</strong> Understood! I will create a plan for the weather widget. I'll write <code>index.html</code> for structure, <code>styles.css</code> for clean styling, and <code>script.js</code> to fetch weather data. Starting compilation...
             </div>
 
             <div class="sim-log animate-msg-3">
-              <div class="sim-log-title"><i data-lucide="terminal"></i> Лог выполнения команд:</div>
-              <div class="sim-log-line completed"><i data-lucide="check"></i> Создание файла <code>index.html</code></div>
-              <div class="sim-log-line completed"><i data-lucide="check"></i> Добавление стилей в <code>styles.css</code></div>
-              <div class="sim-log-line running"><i data-lucide="loader-2" class="spin"></i> Интеграция API погоды и анимаций графиков в <code>script.js</code>...</div>
+              <div class="sim-log-title"><i data-lucide="terminal"></i> Execution Log:</div>
+              <div class="sim-log-line completed"><i data-lucide="check"></i> Creating <code>index.html</code></div>
+              <div class="sim-log-line completed"><i data-lucide="check"></i> Writing styles to <code>styles.css</code></div>
+              <div class="sim-log-line running"><i data-lucide="loader-2" class="spin"></i> Integrating weather API and charts in <code>script.js</code>...</div>
             </div>
           </div>
         </div>
@@ -190,7 +189,7 @@
         <!-- Simulator Right: Live Sandbox Preview Output -->
         <div class="sim-panel sim-preview-panel">
           <div class="sim-panel-header">
-            <div class="sim-tab"><i data-lucide="eye"></i> Живое превью</div>
+            <div class="sim-tab"><i data-lucide="eye"></i> Live Preview</div>
             <div class="sim-window-actions">
               <span class="sim-action-dot"></span>
               <span class="sim-action-dot"></span>
@@ -201,7 +200,7 @@
             <!-- Weather App Mockup Frame inside simulator -->
             <div class="sim-weather-card">
               <div class="weather-search">
-                <input type="text" value="Москва" readonly />
+                <input type="text" value="New York" readonly />
                 <button><i data-lucide="search"></i></button>
               </div>
               <div class="weather-info animate-weather">
@@ -210,18 +209,18 @@
                   <span class="weather-temp">+22°C</span>
                 </div>
                 <div class="weather-details">
-                  <span>Облачно с прояснениями</span>
-                  <span>Влажность: 45% · Ветер: 3.2 м/с</span>
+                  <span>Partly Cloudy</span>
+                  <span>Humidity: 45% · Wind: 3.2 m/s</span>
                 </div>
               </div>
               
               <!-- Simulated Chart Grid -->
               <div class="weather-chart">
-                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 60%;"></div><span>Пн</span></div>
-                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 75%;"></div><span>Вт</span></div>
-                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 90%;"></div><span>Ср</span></div>
-                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 85%;"></div><span>Чт</span></div>
-                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 70%;"></div><span>Пт</span></div>
+                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 60%;"></div><span>Mon</span></div>
+                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 75%;"></div><span>Tue</span></div>
+                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 90%;"></div><span>Wed</span></div>
+                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 85%;"></div><span>Thu</span></div>
+                <div class="chart-bar-wrap"><div class="chart-bar" style="height: 70%;"></div><span>Fri</span></div>
               </div>
             </div>
           </div>
@@ -235,31 +234,31 @@
     <div class="section-container">
       <div class="safety-layout">
         <div class="safety-content">
-          <h2 class="section-title">Безопасность ИИ-агента под вашим полным контролем</h2>
+          <h2 class="section-title">AI Autonomy Under Your Absolute Control</h2>
           <p class="section-subtitle">
-            Мы считаем, что автономность должна быть безопасной. В 7/24 IDE вы сами настраиваете уровень доверия к ИИ:
+            We believe autonomy must be safe. In 7/24 IDE, you configure the exact trust and permissions settings for the developer agent:
           </p>
           
           <ul class="safety-list">
             <li>
               <div class="list-icon"><i data-lucide="slider"></i></div>
               <div>
-                <strong>Настройка разрешений на лету:</strong>
-                Установите режим подтверждения для каждого типа операции: авто-разрешение, запрос подтверждения или полный запрет.
+                <strong>Real-Time Permission Prompts:</strong>
+                Configure approval levels for each operation type: auto-allow, prompt for verification, or block entirely.
               </div>
             </li>
             <li>
               <div class="list-icon"><i data-lucide="git-commit"></i></div>
               <div>
-                <strong>Визуальное Ревью диффов перед записью:</strong>
-                Вы всегда увидите подсвеченную разницу (diff) кода, который агент планирует записать, и сможете отменить или одобрить изменения.
+                <strong>Visual Diff Reviews before writing:</strong>
+                Inspect the exact code diff that the agent wants to write to your disk, and easily approve or reject changes line-by-line.
               </div>
             </li>
             <li>
               <div class="list-icon"><i data-lucide="history"></i></div>
               <div>
-                <strong>Песочница по умолчанию:</strong>
-                Агент физически не имеет доступа к файлам за пределами выбранной вами рабочей папки. Полная безопасность вашей файловой системы.
+                <strong>Folder-Scoped Sandbox:</strong>
+                The agent is physically locked inside your chosen workspace folder, ensuring zero risk of modifying your system files.
               </div>
             </li>
           </ul>
@@ -270,15 +269,15 @@
           <div class="safety-card">
             <div class="safety-card-header">
               <i data-lucide="shield-alert"></i>
-              <span>Запрос разрешения на запуск</span>
+              <span>Permission Request: Command Execution</span>
             </div>
-            <p class="safety-prompt">Агент запрашивает разрешение на выполнение команды терминала:</p>
+            <p class="safety-prompt">The agent is requesting permission to run a terminal command:</p>
             <div class="safety-cmd">
               <code>npm install chart.js --save</code>
             </div>
             <div class="safety-actions">
-              <button class="btn-deny">Запретить</button>
-              <button class="btn-allow">Разрешить</button>
+              <button class="btn-deny">Deny</button>
+              <button class="btn-allow">Allow</button>
             </div>
           </div>
         </div>
@@ -290,37 +289,37 @@
   <section class="quickstart-section" id="quickstart">
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Быстрый старт за 2 минуты</h2>
-        <p class="section-subtitle">Начать работу с ИИ-разработчиком невероятно просто.</p>
+        <h2 class="section-title">Get Started in 2 Minutes</h2>
+        <p class="section-subtitle">Starting your journey with an AI developer is incredibly straightforward.</p>
       </div>
       
       <div class="steps-grid">
         <!-- Step 1 -->
         <div class="step-card">
           <div class="step-num">1</div>
-          <h4>Скачайте и установите</h4>
-          <p>Скачайте установочный файл `.exe` для Windows с GitHub и запустите стандартную установку.</p>
+          <h4>Download & Install</h4>
+          <p>Download the setup file (.exe) for Windows from GitHub and run the standard installer.</p>
         </div>
         
         <!-- Step 2 -->
         <div class="step-card">
           <div class="step-num">2</div>
-          <h4>Выберите рабочую папку</h4>
-          <p>При первом запуске выберите директорию на диске, где агент будет создавать и редактировать файлы.</p>
+          <h4>Select Workspace</h4>
+          <p>Choose any directory on your local machine where you want the agent to build and modify files.</p>
         </div>
         
         <!-- Step 3 -->
         <div class="step-card">
           <div class="step-num">3</div>
-          <h4>Вставьте API-ключ</h4>
-          <p>Вставьте ваш API-ключ OpenRouter в настройках, выберите нужную модель ИИ и начните творить.</p>
+          <h4>Add OpenRouter Key</h4>
+          <p>Paste your OpenRouter API key in settings, pick your preferred AI model, and start building!</p>
         </div>
       </div>
 
       <div class="quickstart-cta">
         <a href="https://github.com/strmax195-hue/7-24-IDE/releases/download/v1.1.0/7-24-IDE-Setup-1.1.0.exe" class="btn-primary btn-large">
           <i data-lucide="download"></i>
-          <span>Скачать установщик 7/24 IDE</span>
+          <span>Download 7/24 IDE Installer</span>
         </a>
       </div>
     </div>
@@ -334,22 +333,22 @@
           <img src="assets/icon.png" alt="7/24 IDE Logo" class="logo-img" />
           <span class="logo-text">7/24 <span class="logo-badge">IDE</span></span>
         </div>
-        <p class="footer-desc">Автономный локальный ИИ-ассистент разработчика для Windows. Создавайте ПО без ограничений.</p>
+        <p class="footer-desc">Autonomous local AI developer assistant for Windows. Build software without limitations.</p>
       </div>
       
       <div class="footer-right">
         <div class="footer-links-group">
-          <h5>Ресурсы</h5>
+          <h5>Resources</h5>
           <ul>
-            <li><a href="https://github.com/strmax195-hue/7-24-IDE" target="_blank">Репозиторий GitHub</a></li>
-            <li><a href="https://github.com/strmax195-hue/7-24-IDE/releases" target="_blank">Список релизов</a></li>
+            <li><a href="https://github.com/strmax195-hue/7-24-IDE" target="_blank">GitHub Repository</a></li>
+            <li><a href="https://github.com/strmax195-hue/7-24-IDE/releases" target="_blank">Releases List</a></li>
             <li><a href="https://openrouter.ai" target="_blank">OpenRouter API</a></li>
           </ul>
         </div>
       </div>
     </div>
     <div class="footer-bottom">
-      <span>© 2026 7/24 IDE. Лицензия MIT. Разработано с любовью и ИИ.</span>
+      <span>© 2026 7/24 IDE. MIT License. Crafted with love and AI.</span>
     </div>
   </footer>
 
