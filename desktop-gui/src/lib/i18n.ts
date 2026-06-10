@@ -236,6 +236,9 @@ const DICT: Record<string, [string, string]> = {
   'Например: Писать комментарии к коду исключительно на русском языке...': ['e.g. Write code comments only in English...', '例如：仅用中文编写代码注释...'],
   'Самописные навыки (Self-Evolving Skills)': ['Self-evolving skills', '自进化技能'],
   'Список навыков, которые агент автоматически сформулировал в фазах рефлексии после успешного выполнения планов.': ['Skills the agent formulated automatically during reflection after completing plans.', '智能体在完成计划后的反思阶段自动制定的技能列表。'],
+  'Системный промпт': ['System prompt', '系统提示词'],
+  'Дополнительные правила, которые будут добавлены к стандартному системному промпту агента (для всех режимов). Оставьте пустым, чтобы использовать поведение по умолчанию.': ['Additional rules to be appended to the agent\'s default system prompt (applies to all modes). Leave empty for default behavior.', '将附加到智能体默认系统提示词中的附加规则 (适用于所有模式)。留空以使用默认行为。'],
+  'Например: Всегда добавляй комментарии Doxygen к публичным функциям. Не используй React, предпочитай ванильный TypeScript...': ['e.g. Always add Doxygen comments to public functions. Do not use React, prefer vanilla TypeScript...', '例如：始终向公共函数添加 Doxygen 注释。不要使用 React，首选原生 TypeScript...'],
 
   // ─── Settings: About ───
   '7/24 IDE — создание приложений с помощью ИИ-агента. Просто опишите — и агент построит.': ['7/24 IDE — build apps with an AI agent. Just describe it and the agent builds it.', '7/24 IDE — 用 AI 智能体构建应用。只需描述，智能体即可构建。'],

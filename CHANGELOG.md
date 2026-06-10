@@ -4,6 +4,15 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.2.1] - 2026-06-10
+
+This hotfix addresses missing localization entries in the System Prompt configuration section.
+
+### Fixed
+*   **System Prompt Translations:** Added Russian, English, and Chinese translations for the Custom System Prompt input header, details label, and placeholder text in the User Modeling tab under Settings.
+
+---
+
 ## [1.2.0] - 2026-06-10
 
 This release focuses on adding local offline capabilities, developer tools extension, git automation, interactive commands execution, visual diff inspections, and bug fixes for the Windows auto-updater.
