@@ -265,7 +265,7 @@
               <!-- Будет заполнено через renderer.ts -->
             </div>
           </div>
-          <div class="terminal-view" id="terminal-view" style="display:none;">
+          <div class="terminal-view" id="terminal-view" style="display:none; flex-direction:column; height: 100%;">
             <div class="terminal-header">
               <span><i data-lucide="terminal"></i> Терминал</span>
               <div style="display:flex; gap:6px; align-items:center;">
@@ -273,7 +273,11 @@
                 <button id="btn-clear-terminal" class="ghost-btn" title="Очистить"><i data-lucide="eraser"></i><span>Очистить</span></button>
               </div>
             </div>
-            <div class="terminal-output" id="terminal-output"><div class="terminal-empty">Здесь появляется живой вывод команд, которые запускает агент.</div></div>
+            <div class="terminal-output" id="terminal-output" style="flex:1;"><div class="terminal-empty">Здесь появляется живой вывод команд, которые запускает агент.</div></div>
+            <div id="terminal-input-bar" class="terminal-input-bar" style="display:none; padding:8px; border-top:1px solid var(--border-default); background:var(--bg-panel); align-items:center; gap:8px;">
+              <input type="text" id="terminal-stdin-input" placeholder="Ввод для терминала (stdin)..." style="flex:1; border:1px solid var(--border-default); border-radius:var(--radius-sm); padding:6px 10px; font-family:var(--font-code); font-size:12px; background:var(--bg-input); color:var(--text-primary); outline:none;" />
+              <button id="btn-terminal-stdin-send" class="secondary-btn tiny" style="padding:6px 12px;"><i data-lucide="corner-down-left"></i> Отправить</button>
+            </div>
           </div>
           <div class="tasks-view" id="tasks-view" style="display:none;">
             <div class="tasks-header">
@@ -314,6 +318,7 @@
           <span class="settings-sidebar-label">Сервер</span>
           <button class="settings-nav-btn" data-section="provider"><i data-lucide="server"></i> Провайдер</button>
           <button class="settings-nav-btn" data-section="models"><i data-lucide="sparkles"></i> Модели</button>
+          <button class="settings-nav-btn" data-section="mcp"><i data-lucide="cpu"></i> MCP Серверы</button>
         </div>
         <div class="settings-sidebar-group">
           <span class="settings-sidebar-label">Интеллект Ассистента</span>
@@ -402,6 +407,17 @@
             </div>
             <label class="toggle-switch">
               <input type="checkbox" id="s-minimize-to-tray">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Умные авто-коммиты (Git)</span>
+              <span class="setting-desc">Автоматически создавать Git-коммит после успешного выполнения каждого шага плана</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="s-git-auto-commit">
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -553,9 +569,20 @@
         <!-- ── Provider ── -->
         <div class="settings-section-page" data-section="provider">
           <h2>Провайдер</h2>
-          <p class="section-intro">Для работы приложения необходим API-ключ. Зарегистрируйтесь на <a href="https://openrouter.ai" target="_blank">openrouter.ai</a> — это единый шлюз ко всем моделям ИИ (GPT-4o, Claude, Gemini, Llama и другие).</p>
+          <p class="section-intro">Выберите провайдера моделей ИИ для генерации кода. Вы можете использовать облачный сервис OpenRouter или локальный Ollama для оффлайн-работы.</p>
 
           <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Провайдер моделей</span>
+              <span class="setting-desc">Выберите между OpenRouter и Ollama</span>
+            </div>
+            <select id="s-provider" class="setting-select">
+              <option value="openrouter" selected>OpenRouter</option>
+              <option value="ollama">Ollama (Offline)</option>
+            </select>
+          </div>
+
+          <div class="setting-row" id="row-api-key">
             <div class="setting-info">
               <span class="setting-title">API-ключ OpenRouter</span>
               <span class="setting-desc">Ваш ключ хранится локально и никуда не передаётся кроме OpenRouter</span>
@@ -564,6 +591,14 @@
               <input type="password" id="s-api-key" class="setting-input" placeholder="sk-or-v1-..." />
               <button id="btn-toggle-key" class="ghost-btn tiny"><i data-lucide="eye"></i></button>
             </div>
+          </div>
+
+          <div class="setting-row" id="row-ollama-url" style="display: none;">
+            <div class="setting-info">
+              <span class="setting-title">Адрес Ollama API</span>
+              <span class="setting-desc">Обычно Ollama работает локально на http://localhost:11434</span>
+            </div>
+            <input type="text" id="s-ollama-url" class="setting-input" placeholder="http://localhost:11434" />
           </div>
 
           <div class="setting-row">
@@ -679,6 +714,61 @@
           </div>
         </div>
 
+        <!-- ── MCP Servers ── -->
+        <div class="settings-section-page" data-section="mcp">
+          <h2>MCP Серверы</h2>
+          <p class="section-intro">Интеграция внешних инструментов через Model Context Protocol (MCP) по протоколу stdio.</p>
+
+          <div class="setting-row vertical" style="align-items: stretch; display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+            <div class="setting-info" style="margin-bottom: 8px;">
+              <span class="setting-title">Список настроенных MCP-серверов</span>
+              <span class="setting-desc">Эти серверы запускаются вместе с IDE и предоставляют дополнительные инструменты.</span>
+            </div>
+            
+            <div class="mcp-servers-list" id="mcp-servers-list" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Dynamic servers list -->
+            </div>
+          </div>
+
+          <button id="btn-add-mcp-server" class="secondary-btn"><i data-lucide="plus"></i> Добавить сервер</button>
+
+          <!-- Add/Edit form -->
+          <div class="mcp-form hidden" id="mcp-add-form" style="border: 1px solid var(--border-default); padding: 16px; border-radius: var(--radius-md); margin-top: 16px; background: var(--bg-panel-alt);">
+            <h4 style="margin-top:0; margin-bottom:12px; font-weight:600;" id="mcp-form-title">Новый MCP сервер</h4>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <div style="flex: 1;">
+                  <label style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:4px; font-weight:500;">Имя сервера</label>
+                  <input type="text" id="mcp-name" class="setting-input" placeholder="например, sqlite" style="width: 100%; box-sizing: border-box;" />
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; margin-top: 15px;">
+                  <label style="font-size:11px; color:var(--text-muted); margin-bottom:4px; font-weight:500;">Активен</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="mcp-active" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:4px; font-weight:500;">Команда</label>
+                <input type="text" id="mcp-command" class="setting-input" placeholder="например, npx или node" style="width: 100%; box-sizing: border-box;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:4px; font-weight:500;">Аргументы (по одному на строку)</label>
+                <textarea id="mcp-args" class="setting-textarea" placeholder="например:&#10;-y&#10;@modelcontextprotocol/server-sqlite&#10;--db&#10;./db.sqlite" rows="4" style="width: 100%; box-sizing: border-box; font-family:var(--font-code); font-size:12px;"></textarea>
+              </div>
+              <div>
+                <label style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:4px; font-weight:500;">Переменные окружения (KEY=VALUE, по одной на строку)</label>
+                <textarea id="mcp-env" class="setting-textarea" placeholder="например:&#10;DB_PATH=./custom.sqlite" rows="2" style="width: 100%; box-sizing: border-box; font-family:var(--font-code); font-size:12px;"></textarea>
+              </div>
+              <div style="display: flex; gap: 10px; margin-top: 4px;">
+                <button id="btn-mcp-save" class="primary-btn tiny">Сохранить</button>
+                <button id="btn-mcp-cancel" class="ghost-btn tiny">Отмена</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- ── About ── -->
         <div class="settings-section-page" data-section="about">
           <h2>О программе</h2>
@@ -708,6 +798,44 @@
           </div>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SIDE-BY-SIDE DIFF COMPARISON MODAL ═══════════ -->
+  <div class="modal-backdrop hidden" id="diff-modal">
+    <div class="modal modal-wide diff-modal-card" style="width: 90vw; max-width: 1200px; height: 85vh; display: flex; flex-direction: column; max-height: 85vh;">
+      <div class="modal-header">
+        <h3><i data-lucide="split"></i> <span id="diff-modal-title">Сравнение изменений</span></h3>
+        <button class="modal-close" id="btn-close-diff-modal"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0;">
+        <div class="diff-file-info" style="padding: 10px 20px; background: var(--bg-panel-alt); border-bottom: 1px solid var(--border-default); font-family: var(--font-code); font-size: 12px; color: var(--text-secondary);">
+          Файл: <span id="diff-file-path" style="font-weight: 600;">src/index.html</span>
+        </div>
+        <div class="diff-panes-container" style="flex: 1; display: flex; overflow: hidden; position: relative;">
+          
+          <!-- Left Pane (Original) -->
+          <div class="diff-pane" id="diff-pane-left" style="flex: 1; overflow: auto; border-right: 1px solid var(--border-default); background: var(--bg-panel);">
+            <div class="diff-pane-header" style="position: sticky; top: 0; background: var(--bg-panel-alt); padding: 6px 14px; font-size: 11px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border-default); z-index: 10;">
+              Оригинал (Original)
+            </div>
+            <pre class="diff-code-content" id="diff-code-left" style="margin: 0; padding: 10px; font-family: var(--font-code); font-size: 12px; line-height: 1.5;"></pre>
+          </div>
+
+          <!-- Right Pane (Modified) -->
+          <div class="diff-pane" id="diff-pane-right" style="flex: 1; overflow: auto; background: var(--bg-panel);">
+            <div class="diff-pane-header" style="position: sticky; top: 0; background: var(--bg-panel-alt); padding: 6px 14px; font-size: 11px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border-default); z-index: 10;">
+              Изменено (Modified)
+            </div>
+            <pre class="diff-code-content" id="diff-code-right" style="margin: 0; padding: 10px; font-family: var(--font-code); font-size: 12px; line-height: 1.5;"></pre>
+          </div>
+
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 14px 20px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--border-default);">
+        <button id="btn-diff-reject" class="secondary-btn" style="border-color: var(--accent-red); color: var(--accent-red);"><i data-lucide="x"></i> Отклонить</button>
+        <button id="btn-diff-approve" class="primary-btn"><i data-lucide="check"></i> Применить</button>
       </div>
     </div>
   </div>

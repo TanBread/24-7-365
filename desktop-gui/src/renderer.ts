@@ -36,6 +36,14 @@ declare global {
       mergeShadowWorkspace: (workspacePath: string) => Promise<boolean>;
       discardShadowWorkspace: (workspacePath: string) => Promise<boolean>;
       showConfirm: (message: string, title?: string) => Promise<boolean>;
+      setMinimizeToTray: (enabled: boolean) => Promise<boolean>;
+      showNotification: (title: string, body: string) => Promise<boolean>;
+      openExternalPreview: (html: string) => Promise<boolean>;
+      updateExternalPreview: (html: string) => Promise<boolean>;
+      sendStdin: (execId: string, text: string) => Promise<boolean>;
+      mcpReinit: (serversJson: string) => Promise<boolean>;
+      mcpListTools: () => Promise<any[]>;
+      mcpCallTool: (serverName: string, toolName: string, args: any) => Promise<any>;
     }
   }
 }
@@ -64,6 +72,15 @@ interface ProjectSnapshot {
   files: Record<string, string>;
 }
 interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string; }
+interface MCPServerConfig {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  active: boolean;
+}
+
 interface AppSettings {
   apiKey: string; 
   model: string; 
@@ -91,6 +108,11 @@ interface AppSettings {
   permExec: 'ask' | 'deny';
   minimizeToTray?: boolean;
   favoriteModels?: string[];
+  // New v1.2.0 features
+  llmProvider?: 'openrouter' | 'ollama';
+  ollamaUrl?: string;
+  gitAutoCommit?: boolean;
+  mcpServers?: MCPServerConfig[];
 }
 
 function validateCodeSyntax(filepath: string, content: string): { valid: boolean; error?: string } {
@@ -135,7 +157,7 @@ function validateCodeSyntax(filepath: string, content: string): { valid: boolean
 }
 
 interface AgentTool {
-  type: 'read_dir' | 'read_file' | 'write_file' | 'edit_file' | 'execute_command' | 'list_components' | 'check_image_size' | 'search_code';
+  type: 'read_dir' | 'read_file' | 'write_file' | 'edit_file' | 'execute_command' | 'list_components' | 'check_image_size' | 'search_code' | string;
   params: any;
   rawTag: string;
 }
@@ -249,6 +271,139 @@ const DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT_BUILD;
 const STORAGE = { settings: 'ag_settings', projects: 'ag_projects', activeProjectId: 'ag_active_project', recentFolders: 'ag_recent_folders' };
 const API_BASE = 'https://openrouter.ai/api/v1';
 
+function getLLMUrl(path: string): string {
+  if (settings.llmProvider === 'ollama') {
+    const base = settings.ollamaUrl ? settings.ollamaUrl.replace(/\/$/, '') : 'http://localhost:11434';
+    if (path === '/models') {
+      return `${base}/api/tags`;
+    }
+    return `${base}/v1${path}`;
+  }
+  return `${API_BASE}${path}`;
+}
+
+function getLLMHeaders(customKey?: string) {
+  if (settings.llmProvider === 'ollama') {
+    return {
+      'Content-Type': 'application/json'
+    };
+  }
+  const key = customKey || settings.apiKey;
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${key}`,
+    'HTTP-Referer': 'https://seven24-ide.local',
+    'X-Title': '7/24 IDE'
+  };
+}
+
+async function fetchModels(providerOrKey?: string, url?: string, key?: string): Promise<any[]> {
+  let provider = settings.llmProvider || 'openrouter';
+  let apiKey = key || settings.apiKey;
+  let ollamaUrl = url || settings.ollamaUrl || 'http://localhost:11434';
+
+  if (providerOrKey === 'ollama' || providerOrKey === 'openrouter') {
+    provider = providerOrKey;
+  } else if (providerOrKey) {
+    provider = 'openrouter';
+    apiKey = providerOrKey;
+  }
+
+  if (modelsStatus) modelsStatus.textContent = t('Загрузка моделей...');
+
+  if (provider === 'ollama') {
+    try {
+      const base = ollamaUrl.replace(/\/$/, '');
+      const resp = await fetch(`${base}/api/tags`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const result = (data.models || []).map((m: any) => ({
+        id: m.name,
+        name: m.name,
+        contextLength: 4096,
+        isFree: true,
+        pricePrompt: 0,
+        priceCompletion: 0,
+      }));
+      if (modelsStatus) {
+        const updatedAt = new Date().toLocaleTimeString();
+        modelsStatus.textContent = `${t('Загружено моделей')}: ${result.length} · ${t('обновлено')} ${updatedAt}`;
+      }
+      return result;
+    } catch (err: any) {
+      if (modelsStatus) modelsStatus.textContent = `Ошибка: ${err.message}`;
+      console.warn('Failed to fetch Ollama models, fallback empty:', err);
+      return [];
+    }
+  } else {
+    try {
+      const resp = await fetch(`${API_BASE}/models`, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const allModels = (data.data || []) as any[];
+
+      const priorityProviders = [
+        'deepseek', 'openai', 'google', 'anthropic',
+        'qwen', 'meta-llama', 'mistralai', 'x-ai',
+        'cohere', 'nvidia', 'microsoft', 'amazon',
+      ];
+
+      const byProvider: Record<string, typeof allModels> = {};
+
+      for (const m of allModels) {
+        const providerName = m.id.split('/')[0] || 'other';
+        if (!byProvider[providerName]) byProvider[providerName] = [];
+        byProvider[providerName].push(m);
+      }
+
+      for (const prov of Object.keys(byProvider)) {
+        byProvider[prov].sort((a: any, b: any) => {
+          const aPriority = a.id.includes(':free') ? 1 : 0;
+          const bPriority = b.id.includes(':free') ? 1 : 0;
+          if (aPriority !== bPriority) return aPriority - bPriority;
+          return a.name?.localeCompare(b.name || '') || 0;
+        });
+      }
+
+      const added = new Set<string>();
+      const result: any[] = [];
+
+      const addModels = (providers: string[]) => {
+        for (const prov of providers) {
+          const models = byProvider[prov] || [];
+          const limited = models.slice(0, 25);
+          for (const m of limited) {
+            if (added.has(m.id)) continue;
+            added.add(m.id);
+            result.push({
+              id: m.id,
+              name: m.name || m.id,
+              contextLength: m.context_length || 0,
+              isFree: parseFloat(m.pricing?.completion || '0') === 0 && parseFloat(m.pricing?.prompt || '0') === 0,
+              pricePrompt: parseFloat(m.pricing?.prompt || '0') || 0,
+              priceCompletion: parseFloat(m.pricing?.completion || '0') || 0,
+            });
+          }
+        }
+      };
+
+      addModels(priorityProviders);
+
+      const remaining = Object.keys(byProvider).filter(p => !priorityProviders.includes(p)).sort();
+      addModels(remaining);
+
+      if (modelsStatus) {
+        const updatedAt = new Date().toLocaleTimeString();
+        modelsStatus.textContent = `${t('Загружено моделей')}: ${result.length} (${Object.keys(byProvider).length}) · ${t('обновлено')} ${updatedAt}`;
+      }
+      return result;
+    } catch (err: any) {
+      if (modelsStatus) modelsStatus.textContent = `Ошибка: ${err.message}`;
+      return [];
+    }
+  }
+}
+
 // ─── Network reliability: fetch with exponential backoff for 429 / 5xx ───
 function sleep(ms: number): Promise<void> {
   return new Promise(res => setTimeout(res, ms));
@@ -295,6 +450,10 @@ let settings: AppSettings = {
   permExec: 'ask',
   minimizeToTray: false,
   favoriteModels: [],
+  llmProvider: 'openrouter',
+  ollamaUrl: 'http://localhost:11434',
+  gitAutoCommit: false,
+  mcpServers: [],
 };
 let projects: Project[] = [];
 let activeProject: Project | null = null;
@@ -306,6 +465,7 @@ let buildSessionWroteFiles = false;
 let agentStepCount = 0;
 const MAX_AGENT_STEPS = 20;
 let activeAbortController: AbortController | null = null;
+let activeCommandExecId: string | null = null;
 
 function createAbortController(): AbortController {
   activeAbortController = new AbortController();
@@ -522,79 +682,7 @@ interface ModelInfo {
   priceCompletion?: number;  // $ per token (output)
 }
 
-async function fetchModels(apiKey: string): Promise<ModelInfo[]> {
-  modelsStatus.textContent = t('Загрузка моделей...');
-  try {
-    const resp = await fetch(`${API_BASE}/models`, { headers: { 'Authorization': `Bearer ${apiKey}` } });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    const allModels = (data.data || []) as any[];
 
-    // Priority providers (order matters for ranking)
-    const priorityProviders = [
-      'deepseek', 'openai', 'google', 'anthropic',
-      'qwen', 'meta-llama', 'mistralai', 'x-ai',
-      'cohere', 'nvidia', 'microsoft', 'amazon',
-    ];
-
-    // Group models by provider
-    const byProvider: Record<string, typeof allModels> = {};
-
-    for (const m of allModels) {
-      const provider = m.id.split('/')[0] || 'other';
-      if (!byProvider[provider]) byProvider[provider] = [];
-      byProvider[provider].push(m);
-    }
-
-    // Sort within each provider: newest/best first, then alphabetically
-    for (const prov of Object.keys(byProvider)) {
-      byProvider[prov].sort((a: any, b: any) => {
-        const aPriority = a.id.includes(':free') ? 1 : 0;
-        const bPriority = b.id.includes(':free') ? 1 : 0;
-        if (aPriority !== bPriority) return aPriority - bPriority;
-        return a.name?.localeCompare(b.name || '') || 0;
-      });
-    }
-
-    // Build result: priority providers first, then others
-    const added = new Set<string>();
-    const result: ModelInfo[] = [];
-
-    const addModels = (providers: string[]) => {
-      for (const prov of providers) {
-        const models = byProvider[prov] || [];
-        // Keep max 25 per provider to avoid overwhelming the list
-        const limited = models.slice(0, 25);
-        for (const m of limited) {
-          if (added.has(m.id)) continue;
-          added.add(m.id);
-          result.push({
-            id: m.id,
-            name: m.name || m.id,
-            contextLength: m.context_length || 0,
-            isFree: parseFloat(m.pricing?.completion || '0') === 0 && parseFloat(m.pricing?.prompt || '0') === 0,
-            pricePrompt: parseFloat(m.pricing?.prompt || '0') || 0,
-            priceCompletion: parseFloat(m.pricing?.completion || '0') || 0,
-          });
-        }
-      }
-    };
-
-    // Add priority providers first
-    addModels(priorityProviders);
-
-    // Add remaining providers (up to 10 more models each)
-    const remaining = Object.keys(byProvider).filter(p => !priorityProviders.includes(p)).sort();
-    addModels(remaining);
-
-    const updatedAt = new Date().toLocaleTimeString();
-    modelsStatus.textContent = `${t('Загружено моделей')}: ${result.length} (${Object.keys(byProvider).length}) · ${t('обновлено')} ${updatedAt}`;
-    return result;
-  } catch (err: any) {
-    modelsStatus.textContent = `Ошибка: ${err.message}`;
-    return [];
-  }
-}
 
 // Auto-refresh: fetch models silently and diff against the cache.
 // On first run after install — just save. On subsequent runs — surface a
@@ -1223,6 +1311,14 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
 
   html = html.replace(/<check_image_size\s+path="([^"]+)"\s*(?:\/>|>\s*<\/check_image_size>)/g, (match, path) => {
     return replaceTag(match, 'check_image_size', `Проверка изображения: ${path}`, '');
+  });
+
+  // Replace each generic MCP tool tag in order
+  html = html.replace(/<(mcp__[a-zA-Z0-9_-]+__[a-zA-Z0-9_-]+)\s+([^>]*?)(?:\/>|>\s*<\/\1>)/g, (match, fullTagName, attrString) => {
+    const parts = fullTagName.split('__');
+    const server = parts[1];
+    const name = parts.slice(2).join('__');
+    return replaceTag(match, fullTagName, `MCP [${server}]: ${name}`, attrString);
   });
 
   return html;
@@ -2228,8 +2324,57 @@ async function executeNextStep(planId: string) {
   executeStepWithMicroAgent(planId, nextIdx);
 }
 
+async function generateCommitMessage(diff: string, stepText: string): Promise<string> {
+  const model = settings.model || 'google/gemini-2.5-pro';
+  const apiKey = settings.apiKey;
+  const truncatedDiff = diff.length > 8000 ? diff.substring(0, 8000) + '\n... [truncated]' : diff;
+
+  const prompt = `Ты — Git Commit Message Generator. На основе следующего шага плана и дифф изменений сгенерируй ОДНУ КОРОТКУЮ (до 72 символов) фразу на английском языке для сообщения коммита.
+Сообщение должно быть в стиле Conventional Commits или просто кратким описанием сути изменений, например: "feat: add Ollama provider configuration UI".
+Не пиши никаких вводных слов, объяснений или разметки. Выведи ТОЛЬКО финальную строку сообщения.
+
+Шаг плана: ${stepText}
+
+Дифф изменений:
+\`\`\`diff
+${truncatedDiff}
+\`\`\``;
+
+  try {
+    const url = getLLMUrl('/chat/completions');
+    const headers = getLLMHeaders(apiKey);
+    const body = {
+      model,
+      messages: [
+        { role: 'system', content: 'You are a git commit helper. Respond with ONLY the commit message string, nothing else.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.1,
+      stream: false,
+    };
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: headers as any,
+      body: JSON.stringify(body),
+    });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.choices && data.choices[0] && data.choices[0].message) {
+        const text = data.choices[0].message.content.trim();
+        return text.replace(/^["'`]|["'`]$/g, '').trim();
+      }
+    }
+  } catch (err) {
+    console.error('Failed to generate commit message via LLM:', err);
+  }
+  
+  return `update for step: ${stepText.substring(0, 50)}`;
+}
+
 // Mark current step as completed and advance
-function markStepCompleted(planId: string, idx: number) {
+async function markStepCompleted(planId: string, idx: number) {
   planSteps[idx].status = 'done';
   savePlanSteps();
   
@@ -2246,6 +2391,33 @@ function markStepCompleted(planId: string, idx: number) {
   refreshIcons();
   renderTasksUI();
   playNotificationSound();
+
+  if (settings.gitAutoCommit && activeProject?.workspacePath) {
+    try {
+      const gitStatus = await window.electronAPI.executeCommand('git status', activeProject.workspacePath);
+      if (gitStatus.code === 0) {
+        await window.electronAPI.executeCommand('git add -A', activeProject.workspacePath);
+        const diffRes = await window.electronAPI.executeCommand('git diff --cached', activeProject.workspacePath);
+        const diff = diffRes.stdout || '';
+        
+        if (diff.trim()) {
+          const stepText = planSteps[idx].text;
+          appendBubble('Система', `🤖 ${t('Генерирую коммит для шага:')} "${stepText}"...`, true);
+          const commitMsg = await generateCommitMessage(diff, stepText);
+          const commitRes = await window.electronAPI.executeCommand(`git commit -m "[AI] ${commitMsg.replace(/"/g, '\\"')}"`, activeProject.workspacePath);
+          
+          if (commitRes.code === 0) {
+            appendBubble('Система', `✅ ${t('Авто-коммит успешно создан:')} <code>[AI] ${commitMsg}</code>`, true);
+          } else {
+            console.warn('Git commit failed:', commitRes.stderr);
+            appendBubble('Система', `⚠️ ${t('Не удалось создать коммит:')} ${commitRes.stderr}`, true);
+          }
+        }
+      }
+    } catch (gitErr) {
+      console.error('Git auto-commit failed:', gitErr);
+    }
+  }
   
   setTimeout(() => {
     executeNextStep(planId);
@@ -2362,6 +2534,42 @@ function showSelfHealingErrorCard(planId: string, command: string, errorMessage:
   });
 }
 
+
+async function injectMcpToolsIntoPrompt(prompt: string): Promise<string> {
+  let mcpTools: any[] = [];
+  if (window.electronAPI?.mcpListTools) {
+    try {
+      mcpTools = await window.electronAPI.mcpListTools();
+    } catch (err) {
+      console.error('Failed to list MCP tools:', err);
+    }
+  }
+
+  if (mcpTools.length > 0) {
+    prompt += '\n\n## ДОСТУПНЫЕ MCP ИНСТРУМЕНТЫ (Model Context Protocol):\n';
+    prompt += 'Ты можешь вызывать следующие внешние инструменты с помощью XML-тегов. Имя тега формируется как mcp__{имя_сервера}__{имя_инструмента}.\n';
+    for (const tool of mcpTools) {
+      const tag = `mcp__${tool.serverName}__${tool.name}`;
+      prompt += `- <${tag}`;
+      
+      const schema = tool.inputSchema || {};
+      const props = schema.properties || {};
+      const required = schema.required || [];
+      const paramList: string[] = [];
+      for (const [propName, propVal] of Object.entries<any>(props)) {
+        const desc = propVal.description ? ` (${propVal.description})` : '';
+        const reqStr = required.includes(propName) ? ' [REQUIRED]' : '';
+        paramList.push(`${propName}="${propVal.type || 'string'}${reqStr}${desc}"`);
+      }
+      
+      if (paramList.length > 0) {
+        prompt += ` ${paramList.join(' ')}`;
+      }
+      prompt += `/> — ${tool.description || ''}\n`;
+    }
+  }
+  return prompt;
+}
 
 // ═══════════════════════════════════════════
 // SKILLS & TOKEN SAVINGS
@@ -2636,6 +2844,23 @@ function parseTools(text: string): AgentTool[] {
   const rawSearchCode = /<search_code\s+query="([^"]+)"\s*(?:\/>|>\s*<\/search_code>)/g;
   while ((match = rawSearchCode.exec(text)) !== null) {
     tools.push({ type: 'search_code', params: { query: match[1] }, rawTag: match[0] });
+  }
+
+  // 9. Generic MCP tools parsing
+  const rawMcpTool = /<(mcp__[a-zA-Z0-9_-]+__[a-zA-Z0-9_-]+)\s+([^>]*?)(?:\/>|>\s*<\/\1>)/g;
+  while ((match = rawMcpTool.exec(text)) !== null) {
+    const fullTagName = match[1];
+    const attrString = match[2];
+    
+    // Parse attributes key="value"
+    const params: Record<string, string> = {};
+    const attrRegex = /([a-zA-Z0-9_-]+)="([^"]*)"/g;
+    let attrMatch;
+    while ((attrMatch = attrRegex.exec(attrString)) !== null) {
+      params[attrMatch[1]] = attrMatch[2];
+    }
+    
+    tools.push({ type: fullTagName, params, rawTag: match[0] });
   }
 
   return tools;
@@ -3008,6 +3233,7 @@ async function runAgentStep() {
   const activeSkills = detectActiveSkills(lastUserMsg, workspaceFiles);
 
   let dynamicSystemPrompt = appMode === 'plan' && !planApproved ? SYSTEM_PROMPT_PLAN : SYSTEM_PROMPT_BUILD;
+  dynamicSystemPrompt = await injectMcpToolsIntoPrompt(dynamicSystemPrompt);
 
   // Language-aware addendum: tell the model to answer in the user's UI language.
   const lang = settings.language || 'ru';
@@ -3148,7 +3374,7 @@ async function executeToolsSequentially(tools: AgentTool[]) {
     const tool = tools[i];
     const accordion = lastAiBubble?.querySelector(`.tool-step-${i}`);
     
-    const opLabel = tool.type === 'read_dir' ? `📁 Чтение: ${tool.params.path}` :
+    let opLabel = tool.type === 'read_dir' ? `📁 Чтение: ${tool.params.path}` :
                     tool.type === 'read_file' ? `📄 Исследование: ${tool.params.path}` :
                     tool.type === 'write_file' ? `✏️ Создание: ${tool.params.path}` :
                     tool.type === 'edit_file' ? `✏️ Правка: ${tool.params.path}` :
@@ -3156,6 +3382,13 @@ async function executeToolsSequentially(tools: AgentTool[]) {
                     tool.type === 'list_components' ? `🔍 Поиск компонентов...` :
                     tool.type === 'search_code' ? `🔎 Поиск в коде: ${tool.params.query}` :
                     tool.type === 'check_image_size' ? `🖼️ Анализ: ${tool.params.path}` : '⚙️ Выполнение...';
+
+    if (tool.type.startsWith('mcp__')) {
+      const parts = tool.type.split('__');
+      const server = parts[1];
+      const name = parts.slice(2).join('__');
+      opLabel = `🛠️ [MCP] ${server}/${name}`;
+    }
     showActiveOp(opLabel);
     setCurrentAction(opLabel);
     
@@ -3297,14 +3530,9 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
 
   const abortController = createAbortController();
   try {
-    const resp = await fetchWithRetry(`${API_BASE}/chat/completions`, {
+    const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://seven24-ide.local',
-        'X-Title': '7/24 IDE'
-      },
+      headers: getLLMHeaders(apiKey),
       signal: abortController.signal,
       body: JSON.stringify({
         model,
@@ -3748,10 +3976,24 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     const execId = genId();
+    activeCommandExecId = execId;
+    
+    // Toggle terminal input bar visibility
+    const inputBar = document.getElementById('terminal-input-bar');
+    const stdinInput = document.getElementById('terminal-stdin-input') as HTMLInputElement;
+    if (inputBar) inputBar.style.display = 'flex';
+    if (stdinInput) {
+      stdinInput.value = '';
+      stdinInput.focus();
+    }
+
     setTerminalStatus('● выполняется');
     const res = await window.electronAPI.executeCommandStream(tool.params.command, activeWorkspace, execId);
     setTerminalStatus(res.code === 0 ? '✓ завершено' : `✗ код ${res.code}`);
     sysBubble.remove();
+
+    if (inputBar) inputBar.style.display = 'none';
+    activeCommandExecId = null;
 
     // Pause build and show error recovery prompt if command failed during plan execution
     if (res.code !== 0 && isExecutingPlan) {
@@ -3835,6 +4077,36 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     }
   }
 
+  if (tool.type.startsWith('mcp__')) {
+    const parts = tool.type.split('__');
+    if (parts.length >= 3) {
+      const serverName = parts[1];
+      const toolName = parts.slice(2).join('__');
+      
+      if (settings.permExec === 'deny') {
+        return 'Ошибка: Выполнение внешних инструментов (MCP) запрещено настройками безопасности.';
+      }
+      if (settings.permExec === 'ask') {
+        const allowed = await requestPermission('exec', `Запуск MCP инструмента: "${serverName}/${toolName}" с параметрами ${JSON.stringify(tool.params)}`);
+        if (!allowed) return 'Действие отклонено пользователем.';
+      }
+      
+      try {
+        const result = await window.electronAPI.mcpCallTool(serverName, toolName, tool.params);
+        if (result && result.content) {
+          const texts = result.content
+            .filter((c: any) => c.type === 'text')
+            .map((c: any) => c.text)
+            .join('\n');
+          return texts || 'Инструмент выполнен успешно без текстового вывода.';
+        }
+        return JSON.stringify(result, null, 2);
+      } catch (err: any) {
+        return `Ошибка вызова MCP инструмента: ${err.message || String(err)}`;
+      }
+    }
+  }
+
   return 'Инструмент не поддерживается.';
 }
 
@@ -3893,102 +4165,132 @@ function requestPermission(type: string, desc: string): Promise<boolean> {
   });
 }
 
+function alignLines(oldLines: string[], newLines: string[]): { left: (string | null)[], right: (string | null)[] } {
+  const m = oldLines.length;
+  const n = newLines.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+  
+  const leftAligned: (string | null)[] = [];
+  const rightAligned: (string | null)[] = [];
+  let i = m, j = n;
+  
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      leftAligned.push(oldLines[i - 1]);
+      rightAligned.push(newLines[j - 1]);
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      leftAligned.push(null);
+      rightAligned.push(newLines[j - 1]);
+      j--;
+    } else {
+      leftAligned.push(oldLines[i - 1]);
+      rightAligned.push(null);
+      i--;
+    }
+  }
+  
+  return {
+    left: leftAligned.reverse(),
+    right: rightAligned.reverse()
+  };
+}
+
+function buildSideBySideDiff(filePath: string, oldContent: string, newContent: string) {
+  const oldLines = oldContent ? oldContent.split('\n') : [];
+  const newLines = newContent ? newContent.split('\n') : [];
+  const { left, right } = alignLines(oldLines, newLines);
+  
+  const leftPane = document.getElementById('diff-code-left');
+  const rightPane = document.getElementById('diff-code-right');
+  const filePathEl = document.getElementById('diff-file-path');
+  
+  if (filePathEl) filePathEl.textContent = filePath;
+  
+  let leftHTML = '';
+  let rightHTML = '';
+  let leftLineNum = 1;
+  let rightLineNum = 1;
+  
+  const len = left.length;
+  for (let i = 0; i < len; i++) {
+    const l = left[i];
+    const r = right[i];
+    
+    if (l === null && r !== null) {
+      leftHTML += `<div class="diff-line empty-slot"><div class="diff-line-num">&nbsp;</div><div class="diff-line-content">&nbsp;</div></div>`;
+      rightHTML += `<div class="diff-line added"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${esc(r)}</div></div>`;
+    } else if (l !== null && r === null) {
+      leftHTML += `<div class="diff-line removed"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${esc(l)}</div></div>`;
+      rightHTML += `<div class="diff-line empty-slot"><div class="diff-line-num">&nbsp;</div><div class="diff-line-content">&nbsp;</div></div>`;
+    } else if (l !== null && r !== null) {
+      if (l === r) {
+        leftHTML += `<div class="diff-line"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${esc(l)}</div></div>`;
+        rightHTML += `<div class="diff-line"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${esc(r)}</div></div>`;
+      } else {
+        leftHTML += `<div class="diff-line removed"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${esc(l)}</div></div>`;
+        rightHTML += `<div class="diff-line added"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${esc(r)}</div></div>`;
+      }
+    }
+  }
+  
+  if (leftPane) leftPane.innerHTML = leftHTML;
+  if (rightPane) rightPane.innerHTML = rightHTML;
+}
+
 function requestWritePermissionWithDiff(filePath: string, oldContent: string, newContent: string): Promise<boolean> {
   const pendingIndicator = $('#permission-pending');
   if (pendingIndicator) pendingIndicator.classList.remove('hidden');
+  
+  if (!document.hasFocus() && window.electronAPI?.showNotification) {
+    window.electronAPI.showNotification(t('Запрос разрешения'), `${t('Авто-Ревью')}: ${filePath}`);
+  }
+
   return new Promise((resolve) => {
-    const diffHTML = generateDiffHTML(oldContent, newContent);
-    const card = document.createElement('div');
-    card.className = 'chat-message ai';
-    card.innerHTML = `
-      <div class="message-meta"><span class="sender-name">${esc(t('Авто-Ревью изменений'))}</span></div>
-      <div class="message-text">
-        <div class="permission-card">
-          <div class="permission-card-title">
-            <i data-lucide="diff"></i>
-            <span>${esc(t('Авто-Ревью'))}: ${esc(filePath)}</span>
-          </div>
-          <div class="diff-card">
-            <div class="diff-card-header"><i data-lucide="file-code"></i> ${esc(filePath)}</div>
-            <div class="diff-lines">
-              ${diffHTML}
-            </div>
-          </div>
-          <div class="permission-card-buttons">
-            <button class="permission-card-btn deny btn-deny">${esc(t('Отклонить'))}</button>
-            <button class="permission-card-btn allow btn-allow">${esc(t('Записать код'))}</button>
-          </div>
-        </div>
-      </div>
-    `;
-    chatMessages.appendChild(card);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-    refreshIcons();
-
-    if (!document.hasFocus() && window.electronAPI?.showNotification) {
-      window.electronAPI.showNotification(t('Запрос разрешения'), `${t('Авто-Ревью')}: ${filePath}`);
-    }
-
+    const modal = document.getElementById('diff-modal')!;
+    modal.classList.remove('hidden');
+    
+    buildSideBySideDiff(filePath, oldContent, newContent);
+    
+    const btnApprove = document.getElementById('btn-diff-approve')!;
+    const btnReject = document.getElementById('btn-diff-reject')!;
+    const btnClose = document.getElementById('btn-close-diff-modal')!;
+    
     const cleanup = () => {
-      card.remove();
+      modal.classList.add('hidden');
       if (pendingIndicator) pendingIndicator.classList.add('hidden');
+      btnApprove.removeEventListener('click', handleApprove);
+      btnReject.removeEventListener('click', handleReject);
+      btnClose.removeEventListener('click', handleReject);
     };
-
-    card.querySelector('.btn-allow')?.addEventListener('click', () => {
+    
+    const handleApprove = () => {
       cleanup();
       appendBubble('Вы', `${t('Приняты изменения в файле')}: ${filePath}`, false);
       resolve(true);
-    });
-
-    card.querySelector('.btn-deny')?.addEventListener('click', () => {
+    };
+    
+    const handleReject = () => {
       cleanup();
       appendBubble('Вы', `${t('Отклонены изменения в файле')}: ${filePath}`, false);
       resolve(false);
-    });
+    };
+    
+    btnApprove.addEventListener('click', handleApprove);
+    btnReject.addEventListener('click', handleReject);
+    btnClose.addEventListener('click', handleReject);
   });
-}
-
-function generateDiffHTML(oldContent: string, newContent: string): string {
-  const oldLines = oldContent ? oldContent.split('\n') : [];
-  const newLines = newContent ? newContent.split('\n') : [];
-  let html = '';
-
-  if (oldLines.length === 0) {
-    return newLines.map(l => `<div class="diff-line added">+ ${esc(l)}</div>`).join('');
-  }
-
-  let i = 0;
-  let j = 0;
-  let diffCount = 0;
-
-  while ((i < oldLines.length || j < newLines.length) && diffCount < 40) {
-    if (i < oldLines.length && j < newLines.length) {
-      if (oldLines[i] === newLines[j]) {
-        html += `<div class="diff-line normal">  ${esc(oldLines[i].slice(0, 120))}</div>`;
-        i++;
-        j++;
-      } else {
-        html += `<div class="diff-line removed">- ${esc(oldLines[i].slice(0, 120))}</div>`;
-        i++;
-        html += `<div class="diff-line added">+ ${esc(newLines[j].slice(0, 120))}</div>`;
-        j++;
-        diffCount++;
-      }
-    } else if (i < oldLines.length) {
-      html += `<div class="diff-line removed">- ${esc(oldLines[i].slice(0, 120))}</div>`;
-      i++;
-      diffCount++;
-    } else if (j < newLines.length) {
-      html += `<div class="diff-line added">+ ${esc(newLines[j].slice(0, 120))}</div>`;
-      j++;
-      diffCount++;
-    }
-  }
-
-  if (i < oldLines.length || j < newLines.length) {
-    html += `<div class="diff-line normal" style="font-style: italic; color:var(--text-muted); text-align:center;">... (остальные изменения скрыты для краткости)</div>`;
-  }
-  return html;
 }
 
 // ═══════════════════════════════════════════
@@ -4417,8 +4719,34 @@ function openSettings() {
   const sMinToTray = document.getElementById('s-minimize-to-tray') as HTMLInputElement;
   if (sMinToTray) sMinToTray.checked = !!settings.minimizeToTray;
 
+  // Provider and auto-commit populating
+  const sProvider = document.getElementById('s-provider') as HTMLSelectElement;
+  const sOllamaUrl = document.getElementById('s-ollama-url') as HTMLInputElement;
+  const rowApiKey = document.getElementById('row-api-key') as HTMLElement;
+  const rowOllamaUrl = document.getElementById('row-ollama-url') as HTMLElement;
+  const sGitAutoCommit = document.getElementById('s-git-auto-commit') as HTMLInputElement;
+
+  if (sProvider) sProvider.value = settings.llmProvider || 'openrouter';
+  if (sOllamaUrl) sOllamaUrl.value = settings.ollamaUrl || 'http://localhost:11434';
+  if (sGitAutoCommit) sGitAutoCommit.checked = !!settings.gitAutoCommit;
+
+  const provVal = settings.llmProvider || 'openrouter';
+  if (provVal === 'ollama') {
+    if (rowApiKey) rowApiKey.style.display = 'none';
+    if (rowOllamaUrl) rowOllamaUrl.style.display = 'flex';
+  } else {
+    if (rowApiKey) rowApiKey.style.display = 'flex';
+    if (rowOllamaUrl) rowOllamaUrl.style.display = 'none';
+  }
+
   if (settings.cachedModels.length > 0) populateModelSelect(settings.cachedModels, settings.model);
-  else if (settings.apiKey) fetchModels(settings.apiKey).then(m => { settings.cachedModels = m; saveSettings(); populateModelSelect(m, settings.model); });
+  else if (settings.apiKey || settings.llmProvider === 'ollama') {
+    fetchModels(settings.llmProvider, settings.ollamaUrl, settings.apiKey).then(m => {
+      settings.cachedModels = m;
+      saveSettings();
+      populateModelSelect(m, settings.model);
+    });
+  }
   
   // Populate Profile fields
   let profile = { codingStyle: '', libraries: [] as string[], customNotes: '' };
@@ -4438,6 +4766,7 @@ function openSettings() {
   if (sSysPrompt) sSysPrompt.value = (settings.systemPrompt && settings.systemPrompt !== DEFAULT_SYSTEM_PROMPT) ? settings.systemPrompt : '';
 
   renderSkillsList();
+  renderMcpServers();
 
   refreshIcons();
 }
@@ -4471,6 +4800,13 @@ function closeSettings() {
   settings.permRead = sPermRead.value as any;
   settings.permWrite = sPermWrite.value as any;
   settings.permExec = sPermExec.value as any;
+
+  const sProvider = document.getElementById('s-provider') as HTMLSelectElement;
+  if (sProvider) settings.llmProvider = sProvider.value as any;
+  const sOllamaUrl = document.getElementById('s-ollama-url') as HTMLInputElement;
+  if (sOllamaUrl) settings.ollamaUrl = sOllamaUrl.value.trim();
+  const sGitAutoCommit = document.getElementById('s-git-auto-commit') as HTMLInputElement;
+  if (sGitAutoCommit) settings.gitAutoCommit = sGitAutoCommit.checked;
   const sMinToTraySave = document.getElementById('s-minimize-to-tray') as HTMLInputElement;
   if (sMinToTraySave) {
     settings.minimizeToTray = sMinToTraySave.checked;
@@ -4525,6 +4861,10 @@ $('#btn-open-setup')?.addEventListener('click', openSettings);
 $('#btn-close-settings').addEventListener('click', closeSettings);
 
 $('#btn-save-settings')?.addEventListener('click', closeSettings);
+
+$('#btn-add-mcp-server')?.addEventListener('click', () => openMcpEditForm(null));
+$('#btn-mcp-save')?.addEventListener('click', saveMcpServer);
+$('#btn-mcp-cancel')?.addEventListener('click', closeMcpEditForm);
 
 // Settings sidebar nav
 $$('.settings-nav-btn').forEach(btn => btn.addEventListener('click', () => {
@@ -4745,6 +5085,9 @@ function playNotificationSound() {
 // ═══════════════════════════════════════════
 function init() {
   loadSettings(); 
+  if (window.electronAPI?.mcpReinit) {
+    window.electronAPI.mcpReinit(JSON.stringify(settings.mcpServers || [])).catch(() => {});
+  }
   if (settings.minimizeToTray !== undefined && window.electronAPI?.setMinimizeToTray) {
     window.electronAPI.setMinimizeToTray(settings.minimizeToTray).catch(() => {});
   }
@@ -5404,6 +5747,96 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
     setTerminalStatus('');
   });
 
+  // Terminal Stdin Input
+  const stdinInput = document.getElementById('terminal-stdin-input') as HTMLInputElement;
+  const btnStdinSend = document.getElementById('btn-terminal-stdin-send');
+  
+  const handleStdinSend = () => {
+    if (!stdinInput || !activeCommandExecId) return;
+    const text = stdinInput.value;
+    if (!text) return;
+    appendTerminal('stdout', text + '\n');
+    if (window.electronAPI?.sendStdin) {
+      window.electronAPI.sendStdin(activeCommandExecId, text + '\n').catch(err => {
+        console.error('Failed to send stdin:', err);
+      });
+    }
+    stdinInput.value = '';
+  };
+
+  stdinInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      handleStdinSend();
+    }
+  });
+
+  btnStdinSend?.addEventListener('click', handleStdinSend);
+
+  // Sync scroll for side-by-side diff Modal
+  const paneLeft = document.getElementById('diff-pane-left');
+  const paneRight = document.getElementById('diff-pane-right');
+  if (paneLeft && paneRight) {
+    let isScrollingLeft = false;
+    let isScrollingRight = false;
+    
+    paneLeft.addEventListener('scroll', () => {
+      if (isScrollingRight) return;
+      isScrollingLeft = true;
+      paneRight.scrollTop = paneLeft.scrollTop;
+      paneRight.scrollLeft = paneLeft.scrollLeft;
+      isScrollingLeft = false;
+    });
+    
+    paneRight.addEventListener('scroll', () => {
+      if (isScrollingLeft) return;
+      isScrollingRight = true;
+      paneLeft.scrollTop = paneRight.scrollTop;
+      paneLeft.scrollLeft = paneRight.scrollLeft;
+      isScrollingRight = false;
+    });
+  }
+
+  // Ollama & OpenRouter provider switches
+  const sProvider = document.getElementById('s-provider') as HTMLSelectElement;
+  const sOllamaUrl = document.getElementById('s-ollama-url') as HTMLInputElement;
+  const rowApiKey = document.getElementById('row-api-key') as HTMLElement;
+  const rowOllamaUrl = document.getElementById('row-ollama-url') as HTMLElement;
+
+  sProvider?.addEventListener('change', async () => {
+    const provVal = sProvider.value;
+    if (provVal === 'ollama') {
+      if (rowApiKey) rowApiKey.style.display = 'none';
+      if (rowOllamaUrl) rowOllamaUrl.style.display = 'flex';
+    } else {
+      if (rowApiKey) rowApiKey.style.display = 'flex';
+      if (rowOllamaUrl) rowOllamaUrl.style.display = 'none';
+    }
+    
+    const models = await fetchModels(provVal, sOllamaUrl?.value.trim(), apiKeyInput?.value.trim());
+    if (models.length > 0) {
+      settings.cachedModels = models;
+      populateModelSelect(models, settings.model);
+    } else {
+      modelSelect.innerHTML = `<option value="">${provVal === 'ollama' ? t('Не удалось загрузить модели с Ollama') : t('Сначала введите API-ключ...')}</option>`;
+      modelSelect.disabled = true;
+      modelsStatus.textContent = '';
+    }
+  });
+
+  let ollamaFetchTimeout: any = null;
+  sOllamaUrl?.addEventListener('input', () => {
+    clearTimeout(ollamaFetchTimeout);
+    if (sProvider?.value === 'ollama') {
+      ollamaFetchTimeout = setTimeout(async () => {
+        const models = await fetchModels('ollama', sOllamaUrl.value.trim(), '');
+        if (models.length > 0) {
+          settings.cachedModels = models;
+          populateModelSelect(models, settings.model);
+        }
+      }, 600);
+    }
+  });
+
   // Start the background keep-alive ping loop for prompt caching
   startKeepAlivePing();
 
@@ -5526,6 +5959,171 @@ function renderSkillsList() {
   refreshIcons();
 }
 
+let editingMcpIndex: number | null = null;
+
+function renderMcpServers() {
+  const container = document.getElementById('mcp-servers-list');
+  if (!container) return;
+  
+  const mcpServers = settings.mcpServers || [];
+  if (mcpServers.length === 0) {
+    container.innerHTML = `<div style="padding: 16px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); text-align: center; color: var(--text-muted); font-size: 12px;">${t('Список MCP серверов пуст.')}</div>`;
+    return;
+  }
+  
+  container.innerHTML = '';
+  mcpServers.forEach((s, idx) => {
+    const el = document.createElement('div');
+    el.className = 'mcp-server-card';
+    el.innerHTML = `
+      <div class="mcp-server-details">
+        <div class="mcp-server-title">
+          <div class="mcp-server-status ${s.active ? 'active' : 'inactive'}"></div>
+          <span>${esc(s.name)}</span>
+        </div>
+        <div class="mcp-server-command">${esc(s.command)} ${esc((s.args || []).join(' '))}</div>
+      </div>
+      <div class="mcp-server-actions">
+        <button class="ghost-btn edit-mcp-btn" data-index="${idx}" style="padding: 2px 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+          <i data-lucide="edit" style="width:12px; height:12px;"></i> ${esc(t('Редактировать'))}
+        </button>
+        <button class="ghost-btn delete-mcp-btn" data-index="${idx}" style="padding: 2px 6px; color: var(--accent-red); font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+          <i data-lucide="trash-2" style="width:12px; height:12px;"></i> ${esc(t('Удалить'))}
+        </button>
+      </div>
+    `;
+    
+    el.querySelector('.edit-mcp-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openMcpEditForm(idx);
+    });
+    
+    el.querySelector('.delete-mcp-btn')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = await confirmDialog(`Удалить MCP сервер «${s.name}»?`, 'Удаление MCP сервера');
+      if (ok) {
+        settings.mcpServers?.splice(idx, 1);
+        saveSettings();
+        renderMcpServers();
+        if (window.electronAPI?.mcpReinit) {
+          window.electronAPI.mcpReinit(JSON.stringify(settings.mcpServers || []));
+        }
+      }
+    });
+    
+    container.appendChild(el);
+  });
+  refreshIcons();
+}
+
+function openMcpEditForm(idx: number | null) {
+  const form = document.getElementById('mcp-add-form');
+  const btnAdd = document.getElementById('btn-add-mcp-server');
+  if (!form) return;
+  
+  form.classList.remove('hidden');
+  if (btnAdd) btnAdd.style.display = 'none';
+  
+  editingMcpIndex = idx;
+  
+  const titleEl = document.getElementById('mcp-form-title');
+  const nameInput = document.getElementById('mcp-name') as HTMLInputElement;
+  const activeInput = document.getElementById('mcp-active') as HTMLInputElement;
+  const commandInput = document.getElementById('mcp-command') as HTMLInputElement;
+  const argsTextarea = document.getElementById('mcp-args') as HTMLTextAreaElement;
+  const envTextarea = document.getElementById('mcp-env') as HTMLTextAreaElement;
+  
+  if (idx !== null) {
+    if (titleEl) titleEl.textContent = t('Редактировать MCP сервер') || 'Редактировать MCP сервер';
+    const s = (settings.mcpServers || [])[idx];
+    if (s) {
+      if (nameInput) { nameInput.value = s.name; nameInput.disabled = true; }
+      if (activeInput) activeInput.checked = !!s.active;
+      if (commandInput) commandInput.value = s.command;
+      if (argsTextarea) argsTextarea.value = (s.args || []).join('\n');
+      if (envTextarea) {
+        envTextarea.value = Object.entries(s.env || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+      }
+    }
+  } else {
+    if (titleEl) titleEl.textContent = t('Новый MCP сервер');
+    if (nameInput) { nameInput.value = ''; nameInput.disabled = false; }
+    if (activeInput) activeInput.checked = true;
+    if (commandInput) commandInput.value = '';
+    if (argsTextarea) argsTextarea.value = '';
+    if (envTextarea) envTextarea.value = '';
+  }
+}
+
+function closeMcpEditForm() {
+  const form = document.getElementById('mcp-add-form');
+  const btnAdd = document.getElementById('btn-add-mcp-server');
+  if (form) form.classList.add('hidden');
+  if (btnAdd) btnAdd.style.display = 'inline-flex';
+  editingMcpIndex = null;
+}
+
+function saveMcpServer() {
+  const nameInput = document.getElementById('mcp-name') as HTMLInputElement;
+  const activeInput = document.getElementById('mcp-active') as HTMLInputElement;
+  const commandInput = document.getElementById('mcp-command') as HTMLInputElement;
+  const argsTextarea = document.getElementById('mcp-args') as HTMLTextAreaElement;
+  const envTextarea = document.getElementById('mcp-env') as HTMLTextAreaElement;
+  
+  if (!nameInput || !commandInput) return;
+  
+  const name = nameInput.value.trim();
+  const command = commandInput.value.trim();
+  const active = activeInput ? activeInput.checked : true;
+  
+  if (!name) {
+    alert(t('Введите имя сервера'));
+    return;
+  }
+  if (!command) {
+    alert(t('Введите команду для запуска'));
+    return;
+  }
+  
+  const args = argsTextarea ? argsTextarea.value.split('\n').map(a => a.trim()).filter(a => a) : [];
+  
+  const env: Record<string, string> = {};
+  if (envTextarea) {
+    envTextarea.value.split('\n').forEach(line => {
+      const parts = line.split('=');
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        const val = parts.slice(1).join('=').trim();
+        if (key) env[key] = val;
+      }
+    });
+  }
+  
+  if (!settings.mcpServers) settings.mcpServers = [];
+  
+  const newServer: MCPServerConfig = { name, active, command, args, env };
+  
+  if (editingMcpIndex !== null) {
+    settings.mcpServers[editingMcpIndex] = newServer;
+  } else {
+    if (settings.mcpServers.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+      alert(t('Сервер с таким именем уже существует'));
+      return;
+    }
+    settings.mcpServers.push(newServer);
+  }
+  
+  saveSettings();
+  renderMcpServers();
+  closeMcpEditForm();
+  
+  if (window.electronAPI?.mcpReinit) {
+    window.electronAPI.mcpReinit(JSON.stringify(settings.mcpServers)).catch(err => {
+      console.error('Failed to reinitialize MCP servers:', err);
+    });
+  }
+}
+
 async function runReflection() {
   if (!activeProject || !settings.apiKey || !settings.model) return;
 
@@ -5579,14 +6177,9 @@ async function runReflection() {
   ];
 
   try {
-    const resp = await fetchWithRetry(`${API_BASE}/chat/completions`, {
+    const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.apiKey}`,
-        'HTTP-Referer': 'https://seven24-ide.local',
-        'X-Title': '7/24 IDE'
-      },
+      headers: getLLMHeaders(),
       body: JSON.stringify({
         model: settings.model,
         messages: reflectionMessages,
@@ -5718,6 +6311,7 @@ async function executeStepWithMicroAgent(planId: string, stepIdx: number) {
   };
 
   let dynamicSystemPrompt = SYSTEM_PROMPT_BUILD;
+  dynamicSystemPrompt = await injectMcpToolsIntoPrompt(dynamicSystemPrompt);
   
   // Inject User Profile preferences
   let profile = { codingStyle: '', libraries: [] as string[], customNotes: '' };
@@ -5768,14 +6362,9 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
     appendLog(`🤖 Шаг рассуждения ${microStepCount}...`);
 
     try {
-      const resp = await fetchWithRetry(`${API_BASE}/chat/completions`, {
+      const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.apiKey}`,
-          'HTTP-Referer': 'https://seven24-ide.local',
-          'X-Title': '7/24 IDE'
-        },
+        headers: getLLMHeaders(),
         signal: createAbortController().signal,
         body: JSON.stringify({
           model: settings.model,
@@ -5915,14 +6504,9 @@ ${selectedContext}
 Ответь ТОЛЬКО этой одной строкой без кавычек и дополнительных пояснений.`;
 
   try {
-    const resp = await fetchWithRetry(`${API_BASE}/chat/completions`, {
+    const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.apiKey}`,
-        'HTTP-Referer': 'https://seven24-ide.local',
-        'X-Title': '7/24 IDE'
-      },
+      headers: getLLMHeaders(),
       body: JSON.stringify({
         model: settings.model,
         messages: [{ role: 'user', content: draftPrompt }],
@@ -5987,14 +6571,9 @@ ${steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 Сделай краткое ревью (2-3 предложения) на русском языке. Укажи, безопасен ли план и учтены ли ключевые требования. Если есть критические замечания — выдели их. Ответь кратко, без лишнего оформления.`;
 
   try {
-    const resp = await fetchWithRetry(`${API_BASE}/chat/completions`, {
+    const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.apiKey}`,
-        'HTTP-Referer': 'https://seven24-ide.local',
-        'X-Title': '7/24 IDE'
-      },
+      headers: getLLMHeaders(),
       body: JSON.stringify({
         model: settings.model,
         messages: [{ role: 'user', content: criticPrompt }],

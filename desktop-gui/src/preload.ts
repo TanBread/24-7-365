@@ -91,5 +91,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('open-external-preview', html) as Promise<boolean>,
   updateExternalPreview: (html: string) =>
     ipcRenderer.invoke('update-external-preview', html) as Promise<boolean>,
+
+  // Interactive Terminal Stdin
+  sendStdin: (execId: string, text: string) =>
+    ipcRenderer.invoke('exec-command-stdin', execId, text) as Promise<boolean>,
+
+  // MCP support
+  mcpReinit: (serversJson: string) =>
+    ipcRenderer.invoke('mcp-reinit', serversJson) as Promise<boolean>,
+  mcpListTools: () =>
+    ipcRenderer.invoke('mcp-list-tools') as Promise<any[]>,
+  mcpCallTool: (serverName: string, toolName: string, args: any) =>
+    ipcRenderer.invoke('mcp-call-tool', serverName, toolName, args) as Promise<any>,
 });
 

@@ -3,6 +3,35 @@ import { autoUpdater } from 'electron-updater';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as childProcess from 'child_process';
+import { McpClient } from './lib/mcp';
+
+let activeProcesses: Map<string, childProcess.ChildProcess> = new Map();
+let activeMcpClients: Map<string, McpClient> = new Map();
+
+async function reinitMcpServers(servers: any[]) {
+  // Stop all active servers
+  for (const client of activeMcpClients.values()) {
+    try {
+      await client.stop();
+    } catch (err) {
+      console.error('Error stopping MCP client:', err);
+    }
+  }
+  activeMcpClients.clear();
+
+  // Start active servers
+  for (const s of servers) {
+    if (!s.active) continue;
+    try {
+      const client = new McpClient(s.name, s.command, s.args, s.env);
+      await client.start();
+      activeMcpClients.set(s.name, client);
+      console.log(`[MCP] Server started: ${s.name}`);
+    } catch (err) {
+      console.error(`[MCP] Failed to start server ${s.name}:`, err);
+    }
+  }
+}
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -394,6 +423,7 @@ ipcMain.handle('exec-command', async (_event, command: string, workspacePath: st
 });
 
 // Execute shell command with LIVE streaming output to the renderer terminal panel
+// Execute shell command with LIVE streaming output to the renderer terminal panel
 ipcMain.handle('exec-command-stream', async (_event, command: string, workspacePath: string, execId: string) => {
   return new Promise((resolve) => {
     if (!workspacePath || !fs.existsSync(workspacePath)) {
@@ -416,6 +446,8 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
       windowsHide: true,
     });
 
+    activeProcesses.set(execId, child);
+
     let stdout = '';
     let stderr = '';
     let settled = false;
@@ -423,6 +455,7 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
     const timer = setTimeout(() => {
       if (!settled) {
         send('system', '\n⏱️ Превышено время ожидания (180с). Процесс остановлен.\n');
+        activeProcesses.delete(execId);
         try { child.kill(); } catch {}
       }
     }, 180000);
@@ -441,6 +474,7 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      activeProcesses.delete(execId);
       send('system', `\n❌ Ошибка запуска: ${err.message}\n`);
       resolve({ code: 1, stdout, stderr: stderr + '\n' + err.message });
     });
@@ -448,10 +482,73 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      activeProcesses.delete(execId);
       send('system', `\n[Процесс завершён с кодом ${code ?? 0}]\n`);
       resolve({ code: code ?? 0, stdout, stderr });
     });
   });
+});
+
+// Write to terminal process stdin
+ipcMain.handle('exec-command-stdin', async (_event, execId: string, text: string) => {
+  const child = activeProcesses.get(execId);
+  if (child && child.stdin && !child.stdin.destroyed) {
+    child.stdin.write(text);
+    return true;
+  }
+  return false;
+});
+
+// MCP IPC Handlers
+ipcMain.handle('mcp-reinit', async (_event, serversJson: string) => {
+  try {
+    const servers = JSON.parse(serversJson);
+    await reinitMcpServers(servers);
+    return true;
+  } catch (err) {
+    console.error('mcp-reinit failed:', err);
+    return false;
+  }
+});
+
+ipcMain.handle('mcp-list-tools', async () => {
+  const allTools: any[] = [];
+  for (const [serverName, client] of activeMcpClients.entries()) {
+    if (!client.isReady) continue;
+    try {
+      const res = await client.request('tools/list', {});
+      if (res && res.tools) {
+        for (const t of res.tools) {
+          allTools.push({
+            serverName,
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema,
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to list tools from MCP server ${serverName}:`, err);
+    }
+  }
+  return allTools;
+});
+
+ipcMain.handle('mcp-call-tool', async (_event, serverName: string, toolName: string, args: any) => {
+  const client = activeMcpClients.get(serverName);
+  if (!client) {
+    throw new Error(`MCP server "${serverName}" is not active or found`);
+  }
+  try {
+    const res = await client.request('tools/call', {
+      name: toolName,
+      arguments: args,
+    });
+    return res;
+  } catch (err: any) {
+    console.error(`Failed to call tool "${toolName}" on server "${serverName}":`, err);
+    throw err;
+  }
 });
 
 // Check image dimensions and size
@@ -640,6 +737,11 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  // Disable signature verification on Windows for self-signed or unsigned setups
+  autoUpdater.verifyUpdateCodeSignature = async () => {
+    return null;
+  };
+
   const send = (channel: string, payload: any) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(channel, payload);
@@ -682,6 +784,9 @@ ipcMain.handle('updater-install', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  for (const client of activeMcpClients.values()) {
+    try { client.stop(); } catch {}
+  }
 });
 
 app.on('window-all-closed', () => {
