@@ -89,6 +89,8 @@ interface AppSettings {
   permRead: 'auto' | 'ask';
   permWrite: 'review' | 'auto' | 'ask' | 'deny';
   permExec: 'ask' | 'deny';
+  minimizeToTray?: boolean;
+  favoriteModels?: string[];
 }
 
 function validateCodeSyntax(filepath: string, content: string): { valid: boolean; error?: string } {
@@ -291,6 +293,8 @@ let settings: AppSettings = {
   permRead: 'auto',
   permWrite: 'review',
   permExec: 'ask',
+  minimizeToTray: false,
+  favoriteModels: [],
 };
 let projects: Project[] = [];
 let activeProject: Project | null = null;
@@ -1672,6 +1676,9 @@ async function updateLivePreviewFromFiles() {
       if (content !== lastPreviewContent) {
         lastPreviewContent = content;
         previewIframe.srcdoc = injectPreviewCSP(content);
+        if (window.electronAPI?.updateExternalPreview) {
+          window.electronAPI.updateExternalPreview(content).catch(() => {});
+        }
       }
       if (codeView.style.display === 'flex') {
         codeDisplay.textContent = content;
@@ -2207,6 +2214,9 @@ async function executeNextStep(planId: string) {
     
     appendBubble('Ассистент', t('🎉 Сборка завершена! Все шаги плана успешно выполнены.'), true);
     playNotificationSound();
+    if (window.electronAPI?.showNotification) {
+      window.electronAPI.showNotification('7/24 IDE', t('🎉 Сборка завершена! Все шаги плана успешно выполнены.'));
+    }
     renderTasksUI();
     renderPreview();
     
@@ -2317,6 +2327,13 @@ function showSelfHealingErrorCard(planId: string, command: string, errorMessage:
     chatMessages.appendChild(div);
     chatMessages.scrollTop = chatMessages.scrollHeight;
     refreshIcons();
+
+    if (window.electronAPI?.showNotification) {
+      window.electronAPI.showNotification(
+        t('Ошибка'),
+        `${t('Ошибка сборки на шаге')} ${currentStepIndex + 1}: ${friendlyDesc}`
+      );
+    }
     
     div.querySelector('.btn-heal-error')?.addEventListener('click', () => {
       div.remove();
@@ -3853,6 +3870,10 @@ function requestPermission(type: string, desc: string): Promise<boolean> {
     chatMessages.scrollTop = chatMessages.scrollHeight;
     refreshIcons();
 
+    if (!document.hasFocus() && window.electronAPI?.showNotification) {
+      window.electronAPI.showNotification(t('Запрос разрешения'), desc);
+    }
+
     const cleanup = () => {
       card.remove();
       if (pendingIndicator) pendingIndicator.classList.add('hidden');
@@ -3903,6 +3924,10 @@ function requestWritePermissionWithDiff(filePath: string, oldContent: string, ne
     chatMessages.appendChild(card);
     chatMessages.scrollTop = chatMessages.scrollHeight;
     refreshIcons();
+
+    if (!document.hasFocus() && window.electronAPI?.showNotification) {
+      window.electronAPI.showNotification(t('Запрос разрешения'), `${t('Авто-Ревью')}: ${filePath}`);
+    }
 
     const cleanup = () => {
       card.remove();
@@ -4310,6 +4335,13 @@ function toggleInspectMode(forceVal?: boolean) {
 
 
   // Download / Copy / New / Clear
+$('#btn-external-preview').addEventListener('click', () => {
+  if (!activeProject?.code) return;
+  if (window.electronAPI?.openExternalPreview) {
+    window.electronAPI.openExternalPreview(activeProject.code).catch(e => console.error(e));
+  }
+});
+
 $('#btn-download').addEventListener('click', () => { 
   if (!activeProject?.code) return; 
   const b = new Blob([activeProject.code], { type: 'text/html' }); 
@@ -4382,6 +4414,8 @@ function openSettings() {
   sPermRead.value = settings.permRead;
   sPermWrite.value = settings.permWrite;
   sPermExec.value = settings.permExec;
+  const sMinToTray = document.getElementById('s-minimize-to-tray') as HTMLInputElement;
+  if (sMinToTray) sMinToTray.checked = !!settings.minimizeToTray;
 
   if (settings.cachedModels.length > 0) populateModelSelect(settings.cachedModels, settings.model);
   else if (settings.apiKey) fetchModels(settings.apiKey).then(m => { settings.cachedModels = m; saveSettings(); populateModelSelect(m, settings.model); });
@@ -4437,6 +4471,13 @@ function closeSettings() {
   settings.permRead = sPermRead.value as any;
   settings.permWrite = sPermWrite.value as any;
   settings.permExec = sPermExec.value as any;
+  const sMinToTraySave = document.getElementById('s-minimize-to-tray') as HTMLInputElement;
+  if (sMinToTraySave) {
+    settings.minimizeToTray = sMinToTraySave.checked;
+    if (window.electronAPI?.setMinimizeToTray) {
+      window.electronAPI.setMinimizeToTray(settings.minimizeToTray).catch(() => {});
+    }
+  }
 
   // Save Profile fields
   const sProfileStyle = document.getElementById('s-profile-style') as HTMLTextAreaElement;
@@ -4704,6 +4745,9 @@ function playNotificationSound() {
 // ═══════════════════════════════════════════
 function init() {
   loadSettings(); 
+  if (settings.minimizeToTray !== undefined && window.electronAPI?.setMinimizeToTray) {
+    window.electronAPI.setMinimizeToTray(settings.minimizeToTray).catch(() => {});
+  }
   setLang((settings.language as Lang) || 'ru');
   document.documentElement.dataset.lang = (settings.language as Lang) || 'ru';
   translateDOM();
@@ -4942,6 +4986,56 @@ function init() {
 
   // ═══ Chat model selector ═══
   const chatModelSelect = document.getElementById('chat-model-select') as HTMLSelectElement;
+  
+  function renderFavoriteModelsPills() {
+    const container = document.getElementById('favorite-models-pills');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    if (!settings.favoriteModels || settings.favoriteModels.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+    container.style.display = 'flex';
+    
+    for (const mId of settings.favoriteModels) {
+      const modelInfo = settings.cachedModels.find(m => m.id === mId);
+      if (!modelInfo) continue;
+      
+      const pill = document.createElement('div');
+      pill.className = 'fav-model-pill' + (settings.model === mId ? ' active' : '');
+      const cleanName = (modelInfo.name || modelInfo.id).split(' · ')[0];
+      pill.textContent = cleanName;
+      
+      pill.addEventListener('click', () => {
+        settings.model = mId;
+        saveSettings();
+        if (chatModelSelect) {
+          chatModelSelect.value = mId;
+        }
+        updateModelLabel();
+        updateContextBar();
+        renderFavoriteModelsPills();
+        updateFavoriteModelStarUI();
+      });
+      container.appendChild(pill);
+    }
+  }
+
+  function updateFavoriteModelStarUI() {
+    const btn = document.getElementById('btn-toggle-favorite-model');
+    if (!btn) return;
+    const icon = btn.querySelector('i');
+    if (!icon) return;
+    
+    const isFav = settings.favoriteModels && settings.favoriteModels.includes(settings.model);
+    if (isFav) {
+      icon.classList.add('active');
+    } else {
+      icon.classList.remove('active');
+    }
+  }
+
   if (chatModelSelect) {
     const syncChatModel = () => {
       chatModelSelect.innerHTML = '';
@@ -4958,6 +5052,8 @@ function init() {
         if (m.id === settings.model) o.selected = true;
         chatModelSelect.appendChild(o);
       }
+      renderFavoriteModelsPills();
+      updateFavoriteModelStarUI();
     };
     syncChatModel();
 
@@ -4966,6 +5062,28 @@ function init() {
       saveSettings();
       updateModelLabel();
       updateContextBar();
+      renderFavoriteModelsPills();
+      updateFavoriteModelStarUI();
+    });
+
+    const btnToggleFav = document.getElementById('btn-toggle-favorite-model');
+    btnToggleFav?.addEventListener('click', () => {
+      if (!settings.favoriteModels) settings.favoriteModels = [];
+      const current = settings.model;
+      if (!current) return;
+      
+      const idx = settings.favoriteModels.indexOf(current);
+      if (idx >= 0) {
+        settings.favoriteModels.splice(idx, 1);
+      } else {
+        if (settings.favoriteModels.length >= 3) {
+          settings.favoriteModels.shift();
+        }
+        settings.favoriteModels.push(current);
+      }
+      saveSettings();
+      renderFavoriteModelsPills();
+      updateFavoriteModelStarUI();
     });
   }
 
@@ -4982,6 +5100,8 @@ function init() {
         if (m.id === current) o.selected = true;
         chatModelSelect.appendChild(o);
       }
+      renderFavoriteModelsPills();
+      updateFavoriteModelStarUI();
     }
   });
 
@@ -5026,6 +5146,34 @@ document.getElementById('btn-copy-chat')?.addEventListener('click', () => {
   }).catch(() => {
     appendBubble('Система', t('❌ Не удалось скопировать чат.'), true);
   });
+});
+
+// Export chat to Markdown button
+document.getElementById('btn-export-chat')?.addEventListener('click', () => {
+  if (!activeProject || !activeProject.chatHistory || activeProject.chatHistory.length === 0) return;
+  
+  let md = `# Chat History - Project: ${activeProject.name || 'Untitled'}\n`;
+  md += `Created: ${new Date(activeProject.createdAt).toLocaleString()}\n`;
+  md += `Updated: ${new Date(activeProject.updatedAt).toLocaleString()}\n\n`;
+  md += `---\n\n`;
+  
+  for (const msg of activeProject.chatHistory) {
+    if (msg.role === 'system') {
+      md += `> **System Prompt**:\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+    } else if (msg.role === 'user') {
+      md += `## 👤 User\n\n${msg.content}\n\n`;
+    } else if (msg.role === 'assistant') {
+      md += `## 🤖 Assistant\n\n${msg.content}\n\n`;
+    }
+  }
+  
+  const b = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  const cleanName = (activeProject.name || 'project').toLowerCase().replace(/[^a-z0-9]/g, '-');
+  a.download = `${cleanName}-chat-history.md`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 });
 
   // Media Query Listener for System Color Scheme Changes

@@ -1,10 +1,14 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, safeStorage, Tray, Menu, Notification } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as childProcess from 'child_process';
 
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
+// When true, closing the window hides it to the tray instead of quitting.
+let minimizeToTray = false;
 
 // ─── Secure storage for the API key (OS-level encryption via safeStorage) ───
 function getKeyStorePath(): string {
@@ -94,15 +98,80 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      spellcheck: true,
     },
   });
 
   mainWindow.loadFile(path.join(__dirname, '../src/index.html'));
 
+  // Minimize-to-tray: intercept the close button when the option is enabled.
+  mainWindow.on('close', (e) => {
+    if (minimizeToTray && !isQuitting) {
+      e.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
+
+// ─── System tray ──────────────────────────────────────────────────────────────
+function getTrayIconPath(): string {
+  // Packaged: icon.ico ships in build resources; dev: fall back to repo icon.
+  const candidates = [
+    path.join(process.resourcesPath || '', 'build', 'icon.ico'),
+    path.join(__dirname, '../build/icon.ico'),
+    path.join(__dirname, '../../build/icon.ico'),
+    path.join(__dirname, '../../../icon.png'),
+  ];
+  for (const c of candidates) {
+    try { if (c && fs.existsSync(c)) return c; } catch {}
+  }
+  return '';
+}
+
+function setupTray() {
+  if (tray) return;
+  const iconPath = getTrayIconPath();
+  let image = iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+  if (!image.isEmpty() && process.platform !== 'win32') {
+    image = image.resize({ width: 16, height: 16 });
+  }
+  try {
+    tray = new Tray(image);
+  } catch (err) {
+    console.warn('[tray] failed to create tray:', err);
+    return;
+  }
+  tray.setToolTip('7/24 IDE');
+  const showWindow = () => {
+    if (!mainWindow) { createWindow(); return; }
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  };
+  const menu = Menu.buildFromTemplate([
+    { label: 'Открыть 7/24 IDE', click: showWindow },
+    { type: 'separator' },
+    { label: 'Выход', click: () => { isQuitting = true; app.quit(); } },
+  ]);
+  tray.setContextMenu(menu);
+  tray.on('click', showWindow);
+}
+
+// Renderer toggles "minimize to tray" from settings.
+ipcMain.handle('set-minimize-to-tray', (_event, enabled: boolean) => {
+  minimizeToTray = !!enabled;
+  if (minimizeToTray) {
+    setupTray();
+  } else if (tray) {
+    tray.destroy();
+    tray = null;
+  }
+  return true;
+});
 
 // ═══════════════════════════════════════════
 // IPC HANDLERS FOR DESKTOP AGENT
@@ -464,6 +533,67 @@ ipcMain.handle('show-confirm', async (_event, message: string, title: string) =>
   return result.response === 1;
 });
 
+// Show native OS notification
+ipcMain.handle('show-notification', async (_event, title: string, body: string) => {
+  const iconPath = getTrayIconPath();
+  const notif = new Notification({
+    title,
+    body,
+    icon: iconPath ? nativeImage.createFromPath(iconPath) : undefined
+  });
+  notif.show();
+  return true;
+});
+
+// External preview window management
+let externalPreviewWindow: BrowserWindow | null = null;
+
+ipcMain.handle('open-external-preview', async (_event, html: string) => {
+  if (externalPreviewWindow && !externalPreviewWindow.isDestroyed()) {
+    externalPreviewWindow.focus();
+    return true;
+  }
+
+  externalPreviewWindow = new BrowserWindow({
+    width: 1024,
+    height: 768,
+    title: '7/24 IDE - Preview',
+    autoHideMenuBar: true,
+    backgroundColor: '#FAFAFA',
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    }
+  });
+
+  const tempDir = app.getPath('userData');
+  const tempPath = path.join(tempDir, 'external-preview.html');
+  await fs.promises.writeFile(tempPath, html, 'utf-8');
+  
+  externalPreviewWindow.loadFile(tempPath);
+  externalPreviewWindow.on('closed', () => {
+    externalPreviewWindow = null;
+  });
+  return true;
+});
+
+ipcMain.handle('update-external-preview', async (_event, html: string) => {
+  if (!externalPreviewWindow || externalPreviewWindow.isDestroyed()) {
+    return false;
+  }
+  try {
+    const tempDir = app.getPath('userData');
+    const tempPath = path.join(tempDir, 'external-preview.html');
+    await fs.promises.writeFile(tempPath, html, 'utf-8');
+    externalPreviewWindow.reload();
+    return true;
+  } catch (err) {
+    console.error('Failed to update external preview:', err);
+    return false;
+  }
+});
+
 // ═══════════════════════════════════════════
 // CUSTOM WINDOW CONTROLS
 // ═══════════════════════════════════════════
@@ -550,7 +680,12 @@ ipcMain.handle('updater-install', () => {
   autoUpdater.quitAndInstall(false, true);
 });
 
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 app.on('window-all-closed', () => {
+  if (minimizeToTray) return; // keep running in tray
   if (process.platform !== 'darwin') {
     app.quit();
   }

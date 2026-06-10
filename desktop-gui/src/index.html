@@ -111,6 +111,7 @@
           <button id="chat-search-next" class="chat-search-nav" title="Следующее"><i data-lucide="chevron-down"></i></button>
           <button id="chat-search-close" class="chat-search-close" title="Закрыть (Esc)"><i data-lucide="x"></i></button>
           <button id="btn-copy-chat" class="chat-search-close" title="Копировать весь чат"><i data-lucide="clipboard-copy"></i></button>
+          <button id="btn-export-chat" class="chat-search-close" title="Экспортировать чат в Markdown"><i data-lucide="download"></i></button>
         </div>
         <button id="btn-scroll-bottom" class="scroll-bottom-btn hidden" title="Прокрутить вниз"><i data-lucide="chevron-down"></i></button>
         <div id="chat-gen-indicator" class="chat-gen-indicator hidden">
@@ -126,7 +127,9 @@
             <div class="chat-model-select-wrap" title="Модель ИИ для этого чата">
               <i data-lucide="sparkles" style="width:11px;height:11px;color:var(--text-muted);"></i>
               <select id="chat-model-select" class="chat-model-select"></select>
+              <button id="btn-toggle-favorite-model" class="ghost-btn tiny" title="Закрепить модель" style="padding: 2px 4px; display: flex; align-items: center; justify-content: center; height: 18px; width: 18px; margin-left: 2px;"><i data-lucide="star" style="width: 12px; height: 12px;"></i></button>
             </div>
+            <div class="favorite-models-pills" id="favorite-models-pills"></div>
             <div class="context-bar-wrap" id="context-bar-wrap">
               <span class="context-bar-label" id="context-bar-label">0 / 128K</span>
               <div class="context-bar-track"><div class="context-bar-fill" id="context-bar-fill"></div></div>
@@ -192,6 +195,9 @@
               <button class="device-btn" data-device="mobile" title="Телефон"><i data-lucide="smartphone"></i></button>
             </div>
             <div class="toolbar-divider"></div>
+            <button id="btn-external-preview" class="toolbar-action-btn" title="Открыть превью в отдельном окне">
+              <i data-lucide="external-link"></i><span>В окно</span>
+            </button>
             <button id="btn-download" class="toolbar-action-btn" title="Скачать HTML">
               <i data-lucide="download"></i><span>Скачать</span>
             </button>
@@ -318,7 +324,7 @@
           <button class="settings-nav-btn" data-section="about"><i data-lucide="info"></i> О программе</button>
         </div>
         <div class="settings-sidebar-footer">
-          <span class="settings-version">7/24 IDE v1.0.0</span>
+          <span class="settings-version">7/24 IDE v1.1.0</span>
         </div>
       </nav>
 
@@ -385,6 +391,17 @@
             </div>
             <label class="toggle-switch">
               <input type="checkbox" id="s-sounds">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-title">Сворачивать в трей при закрытии</span>
+              <span class="setting-desc">При закрытии окна приложение будет прятаться в системный трей вместо завершения работы</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="s-minimize-to-tray">
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -671,7 +688,7 @@
               <div class="logo-icon large"><i data-lucide="sparkles"></i></div>
               <div>
                 <h3>7/24 IDE</h3>
-                <span>v1.0.0</span>
+                <span>v1.1.0</span>
               </div>
             </div>
             <p>7/24 IDE — создание приложений с помощью ИИ-агента. Просто опишите — и агент построит.</p>

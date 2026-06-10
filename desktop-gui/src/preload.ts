@@ -77,5 +77,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Native confirm dialog
   showConfirm: (message: string, title?: string) =>
     ipcRenderer.invoke('show-confirm', message, title) as Promise<boolean>,
+
+  // Minimize-to-tray toggle
+  setMinimizeToTray: (enabled: boolean) =>
+    ipcRenderer.invoke('set-minimize-to-tray', enabled) as Promise<boolean>,
+
+  // Show native OS notification
+  showNotification: (title: string, body: string) =>
+    ipcRenderer.invoke('show-notification', title, body) as Promise<boolean>,
+
+  // External preview window management
+  openExternalPreview: (html: string) =>
+    ipcRenderer.invoke('open-external-preview', html) as Promise<boolean>,
+  updateExternalPreview: (html: string) =>
+    ipcRenderer.invoke('update-external-preview', html) as Promise<boolean>,
 });
 

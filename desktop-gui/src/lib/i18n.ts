@@ -122,6 +122,12 @@ const DICT: Record<string, [string, string]> = {
   'Перед каждым запросом агента автоматически сохранять состояние файлов, чтобы можно было откатиться через вкладку «Снапшоты»': ['Automatically save file state before each agent request so you can roll back via the “Snapshots” tab', '在每次智能体请求前自动保存文件状态，以便通过"快照"标签回滚'],
   'Звуковые уведомления': ['Sound notifications', '声音通知'],
   'Воспроизводить звук, когда агент завершил генерацию': ['Play a sound when the agent finishes generating', '智能体完成生成时播放声音'],
+  'Сворачивать в трей при закрытии': ['Minimize to tray on close', '关闭时最小化到系统托盘'],
+  'При закрытии окна приложение будет прятаться в системный трей вместо завершения работы': ['When closing the window, the app will hide in the system tray instead of exiting', '关闭窗口时，应用将隐藏在系统托盘中而不是退出'],
+  'Закрепить модель': ['Pin model', '固定模型'],
+  'В окно': ['To window', '到新窗口'],
+  'Открыть превью в отдельном окне': ['Open preview in a separate window', '在单独的窗口中打开预览'],
+  'Экспортировать чат в Markdown': ['Export chat to Markdown', '导出对话到 Markdown'],
 
   // ─── Settings: Appearance ───
   'Цветовая схема': ['Color scheme', '配色方案'],
