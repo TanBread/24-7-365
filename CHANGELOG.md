@@ -15,6 +15,25 @@ This hotfix release addresses issues with streaming reasoning, infinite tool loo
 
 ---
 
+## [1.3.4] - 2026-06-10
+
+This hotfix release adds initial support for reasoning models.
+
+### Added
+*   **Reasoning Models Support:** Enabled rendering of reasoning blocks for models like DeepSeek.
+
+---
+
+## [1.3.3] - 2026-06-10
+
+This hotfix release addresses layout stability and agent loop robustness.
+
+### Fixed
+*   **UI Stability:** Added robust try-catch boundaries around agent execution cycles to prevent uncaught exceptions from stalling the UI.
+*   **Split-Pane:** Initial performance improvements to split-pane drag handlers.
+
+---
+
 ## [1.3.2] - 2026-06-10
 
 This hotfix release restores the original light branding icon and bumps the internal version tracker.
