@@ -3709,7 +3709,6 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         // Native function calling: OpenRouter forwards `tools` to compatible
         // models. Models without tool support simply ignore this field and
         // we fall back to parsing XML tags from the streamed text.
-        tools: TOOL_SCHEMAS,
         temperature: settings.temperature ?? 0.2,
         stream: true,
         max_tokens: settings.maxTokens || 4096,

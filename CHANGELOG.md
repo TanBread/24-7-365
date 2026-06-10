@@ -4,6 +4,17 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.3.5] - 2026-06-10
+
+This hotfix release addresses issues with streaming reasoning, infinite tool loops, and improves layout interaction.
+
+### Fixed
+*   **Agent Execution & Tools:** Disabled native function calling configuration (`tools`) in API requests to force the model to output standard XML tags. This solves the bug where tool calls were executed invisibly, causing history mismatch loops (e.g. repeated `read_dir` commands) and hanging states.
+*   **Reasoning Blocks UI:** Added collapsible reasoning block support for both inline `<think>` tags and separate reasoning fields (`delta.reasoning`, `delta.thought`). Added a global delegation click handler to allow collapsing/expanding reasoning blocks during live streaming and after reloading saved chats.
+*   **Layout Separator:** Fixed lag issues in the vertical split-pane divider to ensure smooth sliding and docking.
+
+---
+
 ## [1.3.2] - 2026-06-10
 
 This hotfix release restores the original light branding icon and bumps the internal version tracker.
