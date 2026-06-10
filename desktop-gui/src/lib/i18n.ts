@@ -419,6 +419,14 @@ const DICT: Record<string, [string, string]> = {
   'Сигнал завершения отправлен пользователем': ['Termination signal sent by user', '用户发送了终止/中断信号'],
   'Авто-коммит пропущен': ['Auto-commit skipped', '已跳过自动提交'],
   'Создаю коммит...': ['Creating commit...', '正在创建提交...'],
+  '7/24 IDE — автономный локальный ИИ-ассистент разработчика. Автоматически читает файлы, вносит изменения, запускает сборку и тестирует приложения в реальном времени.': ['7/24 IDE is an autonomous local AI developer assistant. It automatically reads files, writes code, runs builds, and tests applications in real time.', '7/24 IDE 是一个自主的本地 AI 开发助手。它会自动读取文件、编写代码、运行构建并在实时中测试应用。'],
+  'Ключевые возможности:': ['Key features:', '核心功能：'],
+  'Поддержка автономной работы через Ollama (полностью оффлайн)': ['Offline support via Ollama (fully offline)', '通过 Ollama 支持离线工作（完全离线）'],
+  'Расширение инструментов через протокол MCP': ['Tool extensions via MCP protocol', '通过 MCP 协议扩展工具'],
+  'Автоматические чекпоинты и возврат состояния в один клик': ['Automatic checkpoints and one-click rollback', '自动检查点和一键回滚'],
+  'Интерактивный терминал с вводом stdin и отменой команд': ['Interactive terminal with stdin input and process cancellation', '带有 stdin 输入和进程取消的交互式终端'],
+  'Умные авто-коммиты в Git с AI-описанием изменений': ['Smart Git auto-commits with AI-generated descriptions', '带有 AI 生成描述的智能 Git 自动提交'],
+  'Myers-LCS сравнение исходного и измененного кода с подсветкой': ['Myers-LCS code comparison with syntax highlighting', '带有语法高亮显示的 Myers-LCS 代码对比'],
 };
 
 let currentLang: Lang = 'ru';
