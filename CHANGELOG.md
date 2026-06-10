@@ -4,6 +4,22 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.2.2] - 2026-06-10
+
+This release refines terminal interactions, git integration, diff readability, local LLM options, and updates branding graphics.
+
+### Added
+*   **Terminal Process Interrupt:** Stop running terminal commands at any time using a new "Stop" button in the Terminal view (utilizing `taskkill` on Windows and `SIGINT` on Unix).
+*   **Terminal Stdin History:** Navigate previously entered inputs using the Up/Down arrow keys in the stdin input bar.
+*   **Git Auto-Commit Verification:** Added settings to verify commits before they are finalized. Shows an interactive review/edit card in chat where you can edit the commit message or skip the commit entirely. Also supports customizable commit message prefixes (defaults to `[AI]`).
+*   **Diff Syntax Highlighting:** Light-weight regex-based syntax highlighting in the Side-by-Side Diff modal for major languages (JS, TS, HTML, CSS, JSON, Python, etc.) to enhance readability during review.
+*   **Ollama Context Size configuration:** Customize the model context limit (`num_ctx`) to 2048, 4096, 8192, or 16384 tokens in the Settings provider panel.
+
+### Refactored & Polished
+*   **Branding Assets & Logo:** Rounded the corners of `icon.png` with a smooth 18% radius mask for a premium modern look, rebuilt `icon.ico`, and updated the presentation banner `social-preview-light.png` with a rich visual composition of the app's features.
+
+---
+
 ## [1.2.1] - 2026-06-10
 
 This hotfix addresses missing localization entries in the System Prompt configuration section.

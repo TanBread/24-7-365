@@ -499,6 +499,24 @@ ipcMain.handle('exec-command-stdin', async (_event, execId: string, text: string
   return false;
 });
 
+// Kill terminal process
+ipcMain.handle('exec-command-kill', async (_event, execId: string) => {
+  const child = activeProcesses.get(execId);
+  if (child) {
+    try {
+      if (process.platform === 'win32') {
+        childProcess.exec(`taskkill /pid ${child.pid} /t /f`);
+      } else {
+        child.kill('SIGINT');
+      }
+      return true;
+    } catch (err) {
+      console.error('Failed to kill process:', err);
+    }
+  }
+  return false;
+});
+
 // MCP IPC Handlers
 ipcMain.handle('mcp-reinit', async (_event, serversJson: string) => {
   try {

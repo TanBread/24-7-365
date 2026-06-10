@@ -270,7 +270,8 @@
               <span><i data-lucide="terminal"></i> Терминал</span>
               <div style="display:flex; gap:6px; align-items:center;">
                 <span id="terminal-status" class="terminal-status"></span>
-                <button id="btn-clear-terminal" class="ghost-btn" title="Очистить"><i data-lucide="eraser"></i><span>Очистить</span></button>
+                <button id="btn-kill-terminal" class="ghost-btn error hidden" title="Остановить"><i data-lucide="square"></i> <span data-t="Остановить">Остановить</span></button>
+                <button id="btn-clear-terminal" class="ghost-btn" title="Очистить"><i data-lucide="eraser"></i><span data-t="Очистить">Очистить</span></button>
               </div>
             </div>
             <div class="terminal-output" id="terminal-output" style="flex:1;"><div class="terminal-empty">Здесь появляется живой вывод команд, которые запускает агент.</div></div>
@@ -329,7 +330,7 @@
           <button class="settings-nav-btn" data-section="about"><i data-lucide="info"></i> О программе</button>
         </div>
         <div class="settings-sidebar-footer">
-          <span class="settings-version">7/24 IDE v1.2.1</span>
+          <span class="settings-version">7/24 IDE v1.2.2</span>
         </div>
       </nav>
 
@@ -413,13 +414,32 @@
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-title">Умные авто-коммиты (Git)</span>
-              <span class="setting-desc">Автоматически создавать Git-коммит после успешного выполнения каждого шага плана</span>
+              <span class="setting-title" data-t="Умные авто-коммиты (Git)">Умные авто-коммиты (Git)</span>
+              <span class="setting-desc" data-t="Автоматически создавать Git-коммит после успешного выполнения каждого шага плана">Автоматически создавать Git-коммит после успешного выполнения каждого шага плана</span>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" id="s-git-auto-commit">
               <span class="toggle-slider"></span>
             </label>
+          </div>
+
+          <div class="setting-row" id="row-git-verify-commit" style="display: none;">
+            <div class="setting-info">
+              <span class="setting-title" data-t="Спрашивать подтверждение перед коммитом">Спрашивать подтверждение перед коммитом</span>
+              <span class="setting-desc" data-t="Автоматически запрашивать подтверждение и редактирование сообщения коммита">Автоматически запрашивать подтверждение и редактирование сообщения коммита</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="s-git-verify-commit">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row" id="row-git-commit-prefix" style="display: none;">
+            <div class="setting-info">
+              <span class="setting-title" data-t="Префикс сообщения коммита:">Префикс сообщения коммита:</span>
+              <span class="setting-desc">Префикс для всех коммитов, созданных ассистентом</span>
+            </div>
+            <input type="text" id="s-git-commit-prefix" class="setting-input" style="width: 120px;" placeholder="[AI]" />
           </div>
         </div>
 
@@ -595,10 +615,23 @@
 
           <div class="setting-row" id="row-ollama-url" style="display: none;">
             <div class="setting-info">
-              <span class="setting-title">Адрес Ollama API</span>
-              <span class="setting-desc">Обычно Ollama работает локально на http://localhost:11434</span>
+              <span class="setting-title" data-t="Адрес Ollama API">Адрес Ollama API</span>
+              <span class="setting-desc" data-t="Обычно Ollama работает локально на http://localhost:11434">Обычно Ollama работает локально на http://localhost:11434</span>
             </div>
             <input type="text" id="s-ollama-url" class="setting-input" placeholder="http://localhost:11434" />
+          </div>
+
+          <div class="setting-row" id="row-ollama-context" style="display: none;">
+            <div class="setting-info">
+              <span class="setting-title" data-t="Размер контекста Ollama:">Размер контекста Ollama:</span>
+              <span class="setting-desc" data-t="Лимит длины контекста для запросов к Ollama (num_ctx). По умолчанию 4096.">Лимит длины контекста для запросов к Ollama (num_ctx). По умолчанию 4096.</span>
+            </div>
+            <select id="s-ollama-context" class="setting-select">
+              <option value="2048">2048</option>
+              <option value="4096" selected>4096</option>
+              <option value="8192">8192</option>
+              <option value="16384">16384</option>
+            </select>
           </div>
 
           <div class="setting-row">
@@ -778,7 +811,7 @@
               <div class="logo-icon large"><i data-lucide="sparkles"></i></div>
               <div>
                 <h3>7/24 IDE</h3>
-                <span>v1.2.1</span>
+                <span>v1.2.2</span>
               </div>
             </div>
             <p>7/24 IDE — создание приложений с помощью ИИ-агента. Просто опишите — и агент построит.</p>

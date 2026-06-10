@@ -41,6 +41,7 @@ declare global {
       openExternalPreview: (html: string) => Promise<boolean>;
       updateExternalPreview: (html: string) => Promise<boolean>;
       sendStdin: (execId: string, text: string) => Promise<boolean>;
+      killCommand: (execId: string) => Promise<boolean>;
       mcpReinit: (serversJson: string) => Promise<boolean>;
       mcpListTools: () => Promise<any[]>;
       mcpCallTool: (serverName: string, toolName: string, args: any) => Promise<any>;
@@ -297,6 +298,18 @@ function getLLMHeaders(customKey?: string) {
   };
 }
 
+function getLLMBody(baseBody: any): any {
+  if (settings.llmProvider === 'ollama') {
+    return {
+      ...baseBody,
+      options: {
+        num_ctx: settings.ollamaContextSize || 4096
+      }
+    };
+  }
+  return baseBody;
+}
+
 async function fetchModels(providerOrKey?: string, url?: string, key?: string): Promise<any[]> {
   let provider = settings.llmProvider || 'openrouter';
   let apiKey = key || settings.apiKey;
@@ -453,6 +466,9 @@ let settings: AppSettings = {
   llmProvider: 'openrouter',
   ollamaUrl: 'http://localhost:11434',
   gitAutoCommit: false,
+  gitVerifyCommit: false,
+  gitCommitPrefix: '[AI]',
+  ollamaContextSize: 4096,
   mcpServers: [],
 };
 let projects: Project[] = [];
@@ -466,6 +482,8 @@ let agentStepCount = 0;
 const MAX_AGENT_STEPS = 20;
 let activeAbortController: AbortController | null = null;
 let activeCommandExecId: string | null = null;
+let stdinHistory: string[] = [];
+let stdinHistoryIdx = -1;
 
 function createAbortController(): AbortController {
   activeAbortController = new AbortController();
@@ -2349,7 +2367,7 @@ ${truncatedDiff}
   try {
     const url = getLLMUrl('/chat/completions');
     const headers = getLLMHeaders(apiKey);
-    const body = {
+    const body = getLLMBody({
       model,
       messages: [
         { role: 'system', content: 'You are a git commit helper. Respond with ONLY the commit message string, nothing else.' },
@@ -2357,7 +2375,7 @@ ${truncatedDiff}
       ],
       temperature: 0.1,
       stream: false,
-    };
+    });
 
     const resp = await fetch(url, {
       method: 'POST',
@@ -2377,6 +2395,77 @@ ${truncatedDiff}
   }
   
   return `update for step: ${stepText.substring(0, 50)}`;
+}
+
+// Show an interactive card to review/edit the commit message before committing
+function showCommitVerificationCard(planId: string, suggestedMsg: string, workspacePath: string): Promise<void> {
+  return new Promise((resolve) => {
+    const div = document.createElement('div');
+    div.className = 'chat-message ai';
+    const prefix = settings.gitCommitPrefix || '[AI]';
+    
+    div.innerHTML = `
+      <div class="message-meta"><span class="sender-name">${t('Запрос подтверждения коммита')}</span></div>
+      <div class="message-text">
+        <div class="plan-error-card" style="border-left-color: var(--accent-blue);">
+          <div class="plan-error-title" style="color: var(--accent-blue);">
+            <i data-lucide="git-commit"></i>
+            <span style="font-weight: 600;">${t('Запрос подтверждения коммита')}</span>
+          </div>
+          <div class="plan-error-friendly" style="font-size: 13px; color: var(--text-primary); margin-top: 6px;">
+            ${t('Отредактируйте сообщение коммита')}:
+          </div>
+          <div style="margin-top: 8px; display: flex; align-items: center; gap: 6px; background: var(--bg-panel-alt); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-default);">
+            <span style="font-family: monospace; font-weight: bold; color: var(--text-secondary); flex-shrink: 0;">${esc(prefix)} </span>
+            <input type="text" class="commit-msg-input" style="flex: 1; background: transparent; border: none; color: var(--text-primary); outline: none; font-family: monospace; font-size: 13px;" value="${esc(suggestedMsg)}" />
+          </div>
+          <div class="plan-error-actions" style="margin-top: 12px; display: flex; gap: 8px;">
+            <button class="primary-btn btn-confirm-commit" style="background: var(--accent-blue); display: flex; align-items: center; gap: 4px; border: none; color: white; padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer;"><i data-lucide="check" style="width: 14px; height: 14px;"></i><span>${t('Закоммитить')}</span></button>
+            <button class="ghost-btn btn-skip-commit" style="border: 1px solid var(--border-default); display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer;"><i data-lucide="x" style="width: 14px; height: 14px;"></i><span>${t('Пропустить')}</span></button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    refreshIcons();
+    
+    const input = div.querySelector('.commit-msg-input') as HTMLInputElement;
+    if (input) {
+      input.focus();
+      input.select();
+      
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (div.querySelector('.btn-confirm-commit') as HTMLButtonElement)?.click();
+        }
+      });
+    }
+    
+    div.querySelector('.btn-confirm-commit')?.addEventListener('click', async () => {
+      const userMsg = input ? input.value.trim() : suggestedMsg;
+      const fullMsg = `${prefix} ${userMsg || suggestedMsg}`;
+      div.remove();
+      
+      appendBubble('Система', `🤖 ${t('Создаю коммит...')} "${fullMsg}"`, true);
+      const commitRes = await window.electronAPI.executeCommand(`git commit -m "${fullMsg.replace(/"/g, "'")}"`, workspacePath);
+      if (commitRes.code === 0) {
+        appendBubble('Система', `✅ ${t('Авто-коммит успешно создан:')} <code>${esc(fullMsg)}</code>`, true);
+      } else {
+        console.warn('Git commit failed:', commitRes.stderr);
+        appendBubble('Система', `⚠️ ${t('Не удалось создать коммит:')} ${commitRes.stderr}`, true);
+      }
+      resolve();
+    });
+    
+    div.querySelector('.btn-skip-commit')?.addEventListener('click', () => {
+      div.remove();
+      appendBubble('Система', `⏭️ ${t('Авто-коммит пропущен')}`, true);
+      resolve();
+    });
+  });
 }
 
 // Mark current step as completed and advance
@@ -2410,13 +2499,20 @@ async function markStepCompleted(planId: string, idx: number) {
           const stepText = planSteps[idx].text;
           appendBubble('Система', `🤖 ${t('Генерирую коммит для шага:')} "${stepText}"...`, true);
           const commitMsg = await generateCommitMessage(diff, stepText);
-          const commitRes = await window.electronAPI.executeCommand(`git commit -m "[AI] ${commitMsg.replace(/"/g, "'")}"`, activeProject.workspacePath);
           
-          if (commitRes.code === 0) {
-            appendBubble('Система', `✅ ${t('Авто-коммит успешно создан:')} <code>[AI] ${commitMsg}</code>`, true);
+          if (settings.gitVerifyCommit) {
+            await showCommitVerificationCard(planId, commitMsg, activeProject.workspacePath);
           } else {
-            console.warn('Git commit failed:', commitRes.stderr);
-            appendBubble('Система', `⚠️ ${t('Не удалось создать коммит:')} ${commitRes.stderr}`, true);
+            const prefix = settings.gitCommitPrefix || '[AI]';
+            const fullMsg = `${prefix} ${commitMsg}`;
+            const commitRes = await window.electronAPI.executeCommand(`git commit -m "${fullMsg.replace(/"/g, "'")}"`, activeProject.workspacePath);
+            
+            if (commitRes.code === 0) {
+              appendBubble('Система', `✅ ${t('Авто-коммит успешно создан:')} <code>${esc(fullMsg)}</code>`, true);
+            } else {
+              console.warn('Git commit failed:', commitRes.stderr);
+              appendBubble('Система', `⚠️ ${t('Не удалось создать коммит:')} ${commitRes.stderr}`, true);
+            }
           }
         }
       }
@@ -3540,7 +3636,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
       method: 'POST',
       headers: getLLMHeaders(apiKey),
       signal: abortController.signal,
-      body: JSON.stringify({
+      body: JSON.stringify(getLLMBody({
         model,
         messages: messages.map((m: any, i: number) => {
           if (m.role === 'system' && i === 0 && model.includes('anthropic')) {
@@ -3555,7 +3651,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         temperature: settings.temperature ?? 0.2,
         stream: true,
         max_tokens: settings.maxTokens || 4096,
-      }),
+      })),
     });
 
     if (!resp.ok) {
@@ -3994,10 +4090,14 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     }
 
     setTerminalStatus('● выполняется');
+    const killBtn = document.getElementById('btn-kill-terminal');
+    if (killBtn) killBtn.classList.remove('hidden');
+
     const res = await window.electronAPI.executeCommandStream(tool.params.command, activeWorkspace, execId);
     setTerminalStatus(res.code === 0 ? '✓ завершено' : `✗ код ${res.code}`);
     sysBubble.remove();
 
+    if (killBtn) killBtn.classList.add('hidden');
     if (inputBar) inputBar.style.display = 'none';
     activeCommandExecId = null;
 
@@ -4213,6 +4313,87 @@ function alignLines(oldLines: string[], newLines: string[]): { left: (string | n
   };
 }
 
+function highlightCodeLine(line: string, filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  let escaped = esc(line);
+  
+  if (['js', 'ts', 'jsx', 'tsx', 'json', 'py', 'css', 'html', 'md', 'rs', 'go', 'java', 'c', 'cpp', 'cs', 'sh', 'bat'].includes(ext)) {
+    if (ext === 'json') {
+      escaped = escaped.replace(/(^|[^\\\\])&quot;([^&]+?)&quot;\s*:/g, '$1<span class="token-key">&quot;$2&quot;</span>:');
+      escaped = escaped.replace(/:(\s*)&quot;([^&]*?)&quot;/g, ':$1<span class="token-string">&quot;$2&quot;</span>');
+      escaped = escaped.replace(/\b(true|false|null|\d+)\b/g, '<span class="token-value">$1</span>');
+      return escaped;
+    }
+    
+    if (ext === 'css') {
+      escaped = escaped.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="token-comment">$1</span>');
+      escaped = escaped.replace(/([a-zA-Z\-]+)\s*:/g, '<span class="token-property">$1</span>:');
+      escaped = escaped.replace(/:\s*([^;]+);/g, ': <span class="token-value">$1</span>;');
+      return escaped;
+    }
+    
+    if (ext === 'html') {
+      escaped = escaped.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="token-comment">$1</span>');
+      escaped = escaped.replace(/(&lt;\/?[a-zA-Z0-9\-]+)/g, '<span class="token-tag">$1</span>');
+      escaped = escaped.replace(/([a-zA-Z0-9\-]+)=(&quot;[^&]*?&quot;)/g, '<span class="token-attr">$1</span>=<span class="token-string">$2</span>');
+      return escaped;
+    }
+
+    let hasComment = false;
+    let commentPart = '';
+    
+    if (ext === 'py') {
+      const hashIdx = escaped.indexOf('#');
+      if (hashIdx !== -1) {
+        const code = escaped.substring(0, hashIdx);
+        const comment = escaped.substring(hashIdx);
+        escaped = code;
+        commentPart = `<span class="token-comment">${comment}</span>`;
+        hasComment = true;
+      }
+    } else {
+      const dslashIdx = escaped.indexOf('//');
+      if (dslashIdx !== -1) {
+        const code = escaped.substring(0, dslashIdx);
+        const comment = escaped.substring(dslashIdx);
+        escaped = code;
+        commentPart = `<span class="token-comment">${comment}</span>`;
+        hasComment = true;
+      }
+    }
+
+    const strings: string[] = [];
+    escaped = escaped.replace(/(&quot;.*?&quot;|&#39;.*?&#39;|&grave;.*?&grave;)/g, (match) => {
+      strings.push(`<span class="token-string">${match}</span>`);
+      return `___STR_TOKEN_${strings.length - 1}___`;
+    });
+
+    const keywords = [
+      'const', 'let', 'var', 'function', 'class', 'return', 'if', 'else', 'for', 'while', 'do',
+      'switch', 'case', 'break', 'continue', 'default', 'import', 'export', 'from', 'as', 'new',
+      'this', 'super', 'extends', 'implements', 'interface', 'type', 'async', 'await', 'try', 'catch',
+      'finally', 'throw', 'yield', 'public', 'private', 'protected', 'static', 'readonly', 'null',
+      'undefined', 'true', 'false', 'def', 'elif', 'in', 'is', 'not', 'and', 'or', 'lambda', 'with',
+      'pass', 'fn', 'mut', 'pub', 'use', 'impl', 'struct', 'enum', 'match', 'package', 'func', 'go',
+      'chan', 'select', 'map'
+    ];
+    
+    const keywordRegex = new RegExp(`\\b(${keywords.join('|')})\\b`, 'g');
+    escaped = escaped.replace(keywordRegex, '<span class="token-keyword">$1</span>');
+    escaped = escaped.replace(/\b(\d+)\b/g, '<span class="token-number">$1</span>');
+
+    for (let j = 0; j < strings.length; j++) {
+      escaped = escaped.replace(`___STR_TOKEN_${j}___`, strings[j]);
+    }
+
+    if (hasComment) {
+      escaped = escaped + commentPart;
+    }
+  }
+  
+  return escaped;
+}
+
 function buildSideBySideDiff(filePath: string, oldContent: string, newContent: string) {
   const oldLines = oldContent ? oldContent.split('\n') : [];
   const newLines = newContent ? newContent.split('\n') : [];
@@ -4236,17 +4417,17 @@ function buildSideBySideDiff(filePath: string, oldContent: string, newContent: s
     
     if (l === null && r !== null) {
       leftHTML += `<div class="diff-line empty-slot"><div class="diff-line-num">&nbsp;</div><div class="diff-line-content">&nbsp;</div></div>`;
-      rightHTML += `<div class="diff-line added"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${esc(r)}</div></div>`;
+      rightHTML += `<div class="diff-line added"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${highlightCodeLine(r, filePath)}</div></div>`;
     } else if (l !== null && r === null) {
-      leftHTML += `<div class="diff-line removed"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${esc(l)}</div></div>`;
+      leftHTML += `<div class="diff-line removed"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${highlightCodeLine(l, filePath)}</div></div>`;
       rightHTML += `<div class="diff-line empty-slot"><div class="diff-line-num">&nbsp;</div><div class="diff-line-content">&nbsp;</div></div>`;
     } else if (l !== null && r !== null) {
       if (l === r) {
-        leftHTML += `<div class="diff-line"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${esc(l)}</div></div>`;
-        rightHTML += `<div class="diff-line"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${esc(r)}</div></div>`;
+        leftHTML += `<div class="diff-line"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${highlightCodeLine(l, filePath)}</div></div>`;
+        rightHTML += `<div class="diff-line"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${highlightCodeLine(r, filePath)}</div></div>`;
       } else {
-        leftHTML += `<div class="diff-line removed"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${esc(l)}</div></div>`;
-        rightHTML += `<div class="diff-line added"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${esc(r)}</div></div>`;
+        leftHTML += `<div class="diff-line removed"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${highlightCodeLine(l, filePath)}</div></div>`;
+        rightHTML += `<div class="diff-line added"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${highlightCodeLine(r, filePath)}</div></div>`;
       }
     }
   }
@@ -4732,18 +4913,33 @@ function openSettings() {
   const rowOllamaUrl = document.getElementById('row-ollama-url') as HTMLElement;
   const sGitAutoCommit = document.getElementById('s-git-auto-commit') as HTMLInputElement;
 
+  const sGitVerifyCommit = document.getElementById('s-git-verify-commit') as HTMLInputElement;
+  const sGitCommitPrefix = document.getElementById('s-git-commit-prefix') as HTMLInputElement;
+  const sOllamaContext = document.getElementById('s-ollama-context') as HTMLSelectElement;
+
   if (sProvider) sProvider.value = settings.llmProvider || 'openrouter';
   if (sOllamaUrl) sOllamaUrl.value = settings.ollamaUrl || 'http://localhost:11434';
   if (sGitAutoCommit) sGitAutoCommit.checked = !!settings.gitAutoCommit;
+  if (sGitVerifyCommit) sGitVerifyCommit.checked = !!settings.gitVerifyCommit;
+  if (sGitCommitPrefix) sGitCommitPrefix.value = settings.gitCommitPrefix || '[AI]';
+  if (sOllamaContext) sOllamaContext.value = String(settings.ollamaContextSize || 4096);
 
   const provVal = settings.llmProvider || 'openrouter';
+  const rowOllamaContext = document.getElementById('row-ollama-context');
   if (provVal === 'ollama') {
     if (rowApiKey) rowApiKey.style.display = 'none';
     if (rowOllamaUrl) rowOllamaUrl.style.display = 'flex';
+    if (rowOllamaContext) rowOllamaContext.style.display = 'flex';
   } else {
     if (rowApiKey) rowApiKey.style.display = 'flex';
     if (rowOllamaUrl) rowOllamaUrl.style.display = 'none';
+    if (rowOllamaContext) rowOllamaContext.style.display = 'none';
   }
+
+  const rowVerify = document.getElementById('row-git-verify-commit');
+  const rowPrefix = document.getElementById('row-git-commit-prefix');
+  if (rowVerify) rowVerify.style.display = settings.gitAutoCommit ? 'flex' : 'none';
+  if (rowPrefix) rowPrefix.style.display = settings.gitAutoCommit ? 'flex' : 'none';
 
   if (settings.cachedModels.length > 0) populateModelSelect(settings.cachedModels, settings.model);
   else if (settings.apiKey || settings.llmProvider === 'ollama') {
@@ -4813,6 +5009,12 @@ function closeSettings() {
   if (sOllamaUrl) settings.ollamaUrl = sOllamaUrl.value.trim();
   const sGitAutoCommit = document.getElementById('s-git-auto-commit') as HTMLInputElement;
   if (sGitAutoCommit) settings.gitAutoCommit = sGitAutoCommit.checked;
+  const sGitVerifyCommit = document.getElementById('s-git-verify-commit') as HTMLInputElement;
+  if (sGitVerifyCommit) settings.gitVerifyCommit = sGitVerifyCommit.checked;
+  const sGitCommitPrefix = document.getElementById('s-git-commit-prefix') as HTMLInputElement;
+  if (sGitCommitPrefix) settings.gitCommitPrefix = sGitCommitPrefix.value.trim() || '[AI]';
+  const sOllamaContext = document.getElementById('s-ollama-context') as HTMLSelectElement;
+  if (sOllamaContext) settings.ollamaContextSize = parseInt(sOllamaContext.value) || 4096;
   const sMinToTraySave = document.getElementById('s-minimize-to-tray') as HTMLInputElement;
   if (sMinToTraySave) {
     settings.minimizeToTray = sMinToTraySave.checked;
@@ -5753,6 +5955,19 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
     setTerminalStatus('');
   });
 
+  // Kill terminal process listener
+  document.getElementById('btn-kill-terminal')?.addEventListener('click', () => {
+    if (activeCommandExecId && window.electronAPI?.killCommand) {
+      window.electronAPI.killCommand(activeCommandExecId).then(success => {
+        if (success) {
+          appendTerminal('system', `\n[${t('Сигнал завершения отправлен пользователем')}]\n`);
+        }
+      }).catch(err => {
+        console.error('Failed to kill terminal process:', err);
+      });
+    }
+  });
+
   // Terminal Stdin Input
   const stdinInput = document.getElementById('terminal-stdin-input') as HTMLInputElement;
   const btnStdinSend = document.getElementById('btn-terminal-stdin-send');
@@ -5761,6 +5976,13 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
     if (!stdinInput || !activeCommandExecId) return;
     const text = stdinInput.value;
     if (!text) return;
+    
+    // Add to history
+    if (stdinHistory.length === 0 || stdinHistory[stdinHistory.length - 1] !== text) {
+      stdinHistory.push(text);
+    }
+    stdinHistoryIdx = -1;
+
     appendTerminal('stdout', text + '\n');
     if (window.electronAPI?.sendStdin) {
       window.electronAPI.sendStdin(activeCommandExecId, text + '\n').catch(err => {
@@ -5773,6 +5995,25 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
   stdinInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       handleStdinSend();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (stdinHistory.length === 0) return;
+      if (stdinHistoryIdx === -1) {
+        stdinHistoryIdx = stdinHistory.length - 1;
+      } else if (stdinHistoryIdx > 0) {
+        stdinHistoryIdx--;
+      }
+      stdinInput.value = stdinHistory[stdinHistoryIdx];
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (stdinHistoryIdx === -1) return;
+      if (stdinHistoryIdx < stdinHistory.length - 1) {
+        stdinHistoryIdx++;
+        stdinInput.value = stdinHistory[stdinHistoryIdx];
+      } else {
+        stdinHistoryIdx = -1;
+        stdinInput.value = '';
+      }
     }
   });
 
@@ -5812,12 +6053,15 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
 
   sProvider?.addEventListener('change', async () => {
     const provVal = sProvider.value;
+    const rowOllamaContext = document.getElementById('row-ollama-context');
     if (provVal === 'ollama') {
       if (rowApiKey) rowApiKey.style.display = 'none';
       if (rowOllamaUrl) rowOllamaUrl.style.display = 'flex';
+      if (rowOllamaContext) rowOllamaContext.style.display = 'flex';
     } else {
       if (rowApiKey) rowApiKey.style.display = 'flex';
       if (rowOllamaUrl) rowOllamaUrl.style.display = 'none';
+      if (rowOllamaContext) rowOllamaContext.style.display = 'none';
     }
     
     const models = await fetchModels(provVal, sOllamaUrl?.value.trim(), apiKeyInput?.value.trim());
@@ -5829,6 +6073,17 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
       modelSelect.disabled = true;
       modelsStatus.textContent = '';
     }
+  });
+
+  // Git auto-commit switches toggling
+  const sGitAutoCommit = document.getElementById('s-git-auto-commit') as HTMLInputElement;
+  const rowVerify = document.getElementById('row-git-verify-commit');
+  const rowPrefix = document.getElementById('row-git-commit-prefix');
+
+  sGitAutoCommit?.addEventListener('change', () => {
+    const active = sGitAutoCommit.checked;
+    if (rowVerify) rowVerify.style.display = active ? 'flex' : 'none';
+    if (rowPrefix) rowPrefix.style.display = active ? 'flex' : 'none';
   });
 
   let ollamaFetchTimeout: any = null;
@@ -6374,13 +6629,13 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
         method: 'POST',
         headers: getLLMHeaders(),
         signal: createAbortController().signal,
-        body: JSON.stringify({
+        body: JSON.stringify(getLLMBody({
           model: settings.model,
           messages: microHistory,
           temperature: settings.temperature ?? 0.2,
           stream: false,
           max_tokens: settings.maxTokens || 4096,
-        }),
+        })),
       });
 
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -6515,12 +6770,12 @@ ${selectedContext}
     const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
       method: 'POST',
       headers: getLLMHeaders(),
-      body: JSON.stringify({
+      body: JSON.stringify(getLLMBody({
         model: settings.model,
         messages: [{ role: 'user', content: draftPrompt }],
         temperature: 0.5,
         max_tokens: 100,
-      }),
+      })),
     });
 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -6582,12 +6837,12 @@ ${steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
     const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
       method: 'POST',
       headers: getLLMHeaders(),
-      body: JSON.stringify({
+      body: JSON.stringify(getLLMBody({
         model: settings.model,
         messages: [{ role: 'user', content: criticPrompt }],
         temperature: 0.3,
         max_tokens: 500,
-      }),
+      })),
     });
 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

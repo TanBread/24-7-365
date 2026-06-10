@@ -25,7 +25,7 @@ It is like having a junior developer working directly in your project folder, 24
 Unlike browser sandboxes, 7/24 IDE works on your real local folders. The agent can run compiler scripts, run `npm install`, compile Rust, or execute backend tests. If it can run in your terminal, the agent can use it to build your project.
 
 ### 🦙 **Ollama Offline Mode**
-Run completely private, offline builds and checklist executions by selecting the Ollama provider in settings and pointing it to your local Ollama API endpoint (typically `http://localhost:11434`).
+Run completely private, offline builds and checklist executions by selecting the Ollama provider in settings and pointing it to your local Ollama API endpoint (typically `http://localhost:11434`). You can also configure local model context limits (`num_ctx`) directly from the settings panel.
 
 ### 🛠️ **Model Context Protocol (MCP)**
 Extend the agent's capabilities by adding external stdio JSON-RPC MCP servers directly from the settings. This lets you connect database inspectors, search engines, web page readers, or code formatters.
@@ -33,14 +33,14 @@ Extend the agent's capabilities by adding external stdio JSON-RPC MCP servers di
 ### 🛡️ **Safety and Absolute Control**
 Mistakes happen, but they won't break your project:
 *   **Auto-Checkpoints:** The app takes a silent snapshot of your workspace before every agent run. You can roll back the entire project to any point in one click via the *Snapshots* tab.
-*   **Fullscreen Myers Diff:** Before writing code to your disk, review edits in a side-by-side fullscreen diff alignment modal using Myers/LCS line-matching.
+*   **Fullscreen Myers Diff:** Before writing code to your disk, review edits in a side-by-side fullscreen diff alignment modal using Myers/LCS line-matching, complete with regex-based syntax highlighting for major languages.
 *   **Permissions Panel:** Set rules for file reads, file writes, and command executions (e.g. Always Ask, Always Allow, or Deny).
 
 ### 🤖 **Smart Auto-Commits**
-Enable Git Auto-Commits in Settings to automatically stage files and create Git commits with AI-generated messages after each successfully completed step in your checklists.
+Enable Git Auto-Commits in Settings to automatically stage files and create Git commits. Choose to verify/edit commit messages before they are created, and customize the commit prefix (defaults to `[AI]`).
 
 ### 💬 **Interactive Terminal (Stdin)**
-No more hangs on interactive prompts. Live stream terminal outputs and write directly to standard input (like `[y/n]` prompts, package configurations, or password requests) from the terminal input bar.
+No more hangs on interactive prompts. Live stream terminal outputs and write directly to standard input (like `[y/n]` prompts, package configurations, or password requests) from the terminal input bar. You can stop/kill active processes at any time and navigate stdin input history using the Up/Down arrow keys.
 
 ### ⚡ **Instant Feedback Loop**
 See your creations come to life. The app features a live preview panel that displays your HTML, CSS, and JS applications. It only refreshes when relevant files change, ensuring a zero-flicker preview as you build.

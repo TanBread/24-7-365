@@ -5941,3 +5941,30 @@ body.theme-dark #btn-toggle-favorite-model i.active {
     transparent 8px
   );
 }
+
+/* Code Highlighting in Diff Side-by-Side (GitHub Style) */
+.diff-line-content {
+  font-family: var(--font-code);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.diff-line-content .token-keyword { color: #d73a49; font-weight: 550; }
+.diff-line-content .token-string { color: #032f62; }
+.diff-line-content .token-comment { color: #6a737d; font-style: italic; }
+.diff-line-content .token-number { color: #005cc5; }
+.diff-line-content .token-key { color: #22863a; }
+.diff-line-content .token-value { color: #005cc5; }
+.diff-line-content .token-tag { color: #22863a; }
+.diff-line-content .token-attr { color: #e36209; }
+.diff-line-content .token-property { color: #6f42c1; }
+
+body.theme-dark .diff-line-content .token-keyword { color: #ff7b72; font-weight: 550; }
+body.theme-dark .diff-line-content .token-string { color: #a5d6ff; }
+body.theme-dark .diff-line-content .token-comment { color: #8b949e; }
+body.theme-dark .diff-line-content .token-number { color: #79c0ff; }
+body.theme-dark .diff-line-content .token-key { color: #7ee787; }
+body.theme-dark .diff-line-content .token-value { color: #79c0ff; }
+body.theme-dark .diff-line-content .token-tag { color: #7ee787; }
+body.theme-dark .diff-line-content .token-attr { color: #ffa657; }
+body.theme-dark .diff-line-content .token-property { color: #d2a8ff; }
+

@@ -404,6 +404,21 @@ const DICT: Record<string, [string, string]> = {
   'Скачивание обновления': ['Downloading update', '正在下载更新'],
   'Обновление готово к установке': ['Update ready to install', '更新已准备好安装'],
   'Перезапустить и установить': ['Restart and install', '重启并安装'],
+
+  // ─── v1.2.2 Refinements ───
+  'Остановить': ['Stop', '停止'],
+  'Спрашивать подтверждение перед коммитом': ['Verify commit before committing', '提交前询问确认'],
+  'Автоматически запрашивать подтверждение и редактирование сообщения коммита': ['Automatically request verification and editing of the commit message', '自动请求验证和编辑提交消息'],
+  'Префикс сообщения коммита:': ['Commit message prefix:', '提交信息前缀：'],
+  'Закоммитить': ['Commit', '提交'],
+  'Пропустить': ['Skip', '跳过'],
+  'Отредактируйте сообщение коммита': ['Edit commit message', '编辑提交信息'],
+  'Запрос подтверждения коммита': ['Commit confirmation request', '提交确认请求'],
+  'Размер контекста Ollama:': ['Ollama context size:', 'Ollama 上下文大小：'],
+  'Лимит длины контекста для запросов к Ollama (num_ctx). По умолчанию 4096.': ['Context length limit for Ollama requests (num_ctx). Default is 4096.', 'Ollama 请求的上下文长度限制 (num_ctx)。默认为 4096。'],
+  'Сигнал завершения отправлен пользователем': ['Termination signal sent by user', '用户发送了终止/中断信号'],
+  'Авто-коммит пропущен': ['Auto-commit skipped', '已跳过自动提交'],
+  'Создаю коммит...': ['Creating commit...', '正在创建提交...'],
 };
 
 let currentLang: Lang = 'ru';

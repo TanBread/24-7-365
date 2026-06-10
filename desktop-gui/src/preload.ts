@@ -96,6 +96,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendStdin: (execId: string, text: string) =>
     ipcRenderer.invoke('exec-command-stdin', execId, text) as Promise<boolean>,
 
+  // Kill running command process
+  killCommand: (execId: string) =>
+    ipcRenderer.invoke('exec-command-kill', execId) as Promise<boolean>,
+
   // MCP support
   mcpReinit: (serversJson: string) =>
     ipcRenderer.invoke('mcp-reinit', serversJson) as Promise<boolean>,
