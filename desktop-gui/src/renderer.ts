@@ -3311,104 +3311,113 @@ function regenerateFromMessage(msgEl: HTMLElement) {
 
 
 async function runAgentStep() {
-  if (!activeProject) {
-    setGeneratingState(false);
-    return;
-  }
-  if (agentStepCount >= MAX_AGENT_STEPS) {
-    setGeneratingState(false);
-    appendBubble('Ассистент', t('⚠️ Достигнут лимит автономной сессии (20 шагов). Для продолжения отправьте новое сообщение.'), true);
-    playNotificationSound();
-    return;
-  }
-
-  agentStepCount++;
-  showThinking();
-  
-  if (appMode === 'plan' && !planApproved) {
-    setCurrentAction('🧠 Планирование...');
-  } else if (isExecutingPlan && currentStepIndex >= 0) {
-    setCurrentAction(`📋 Шаг ${currentStepIndex + 1}: ${planSteps[currentStepIndex]?.text || ''}`);
-  } else {
-    setCurrentAction('🔧 Выполнение задачи...');
-  }
-
-  // Detect dynamic skills
-  let workspaceFiles: any[] = [];
-  if (activeProject && activeProject.workspacePath) {
-    try {
-      workspaceFiles = await window.electronAPI.readDir(activeProject.workspacePath);
-    } catch (e) {}
-  }
-  const lastUserMsg = activeProject!.chatHistory.filter(m => m.role === 'user').pop()?.content || '';
-  const activeSkills = detectActiveSkills(lastUserMsg, workspaceFiles);
-
-  let dynamicSystemPrompt = appMode === 'plan' && !planApproved ? SYSTEM_PROMPT_PLAN : SYSTEM_PROMPT_BUILD;
-  dynamicSystemPrompt = await injectMcpToolsIntoPrompt(dynamicSystemPrompt);
-
-  // Language-aware addendum: tell the model to answer in the user's UI language.
-  const lang = settings.language || 'ru';
-  if (lang === 'en') {
-    dynamicSystemPrompt += '\n\n## LANGUAGE: Reply in clear, concise English. UI strings in code may stay in any language the user prefers.';
-  } else if (lang === 'zh') {
-    dynamicSystemPrompt += '\n\n## 语言：用简洁的中文回复用户。代码中的 UI 字符串可以保留用户偏好的任何语言。';
-  } // ru — default; existing prompts already require Russian
-
-  // Inject the user-defined system prompt override, if set in Settings
-  if (settings.systemPrompt && settings.systemPrompt.trim() && settings.systemPrompt !== DEFAULT_SYSTEM_PROMPT) {
-    dynamicSystemPrompt += `\n\n## ПОЛЬЗОВАТЕЛЬСКИЕ ПРАВИЛА (custom system prompt)\n${settings.systemPrompt.trim()}`;
-  }
-  
-  // Inject User Profile preferences
-  let profile = { codingStyle: '', libraries: [] as string[], customNotes: '' };
   try {
-    const saved = localStorage.getItem('ag_user_profile');
-    if (saved) profile = JSON.parse(saved);
-  } catch (e) {}
-
-  if (profile.codingStyle || (profile.libraries && profile.libraries.length > 0) || profile.customNotes) {
-    dynamicSystemPrompt += '\n\n## ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ И ПРЕДПОЧТЕНИЯ (User Model)\nУчитывай следующие требования пользователя при написании кода:\n';
-    if (profile.codingStyle) dynamicSystemPrompt += `- Стиль кода: ${profile.codingStyle}\n`;
-    if (profile.libraries && profile.libraries.length > 0) dynamicSystemPrompt += `- Библиотеки: ${profile.libraries.join(', ')}\n`;
-    if (profile.customNotes) dynamicSystemPrompt += `- Примечания: ${profile.customNotes}\n`;
-  }
-
-  if (activeSkills.length > 0) {
-    dynamicSystemPrompt += '\n\nПОДКЛЮЧЕННЫЕ НАВЫКИ И ПРАВИЛА:\n';
-    for (const skill of activeSkills) {
-      dynamicSystemPrompt += `\n--- НАВЫК: ${skill.name} ---\n${skill.content}\n`;
+    if (!activeProject) {
+      setGeneratingState(false);
+      return;
     }
-  }
+    if (agentStepCount >= MAX_AGENT_STEPS) {
+      setGeneratingState(false);
+      appendBubble('Ассистент', t('⚠️ Достигнут лимит автономной сессии (20 шагов). Для продолжения отправьте новое сообщение.'), true);
+      playNotificationSound();
+      return;
+    }
 
-  // Inject Plan-mode specific prompt configurations
-  if (appMode === 'plan' && !planApproved) {
-    dynamicSystemPrompt += `\n\nВНИМАНИЕ: Пользователь хочет спроектировать/спланировать проект. Твоя единственная задача на этом этапе — составить пошаговый план разработки.
-    Ты ДОЛЖЕН перечислить все необходимые шаги внутри специальных XML-тегов:
-    <plan>
-      <step>Описание шага 1</step>
-      <step>Описание шага 2</step>
-    </plan>
-    Не пиши исходный код и не вызывай инструменты записи/изменения файлов (<write_file> и <edit_file>). Только подготовить план. Отвечай кратко на русском языке.`;
-  } else if (isExecutingPlan && currentStepIndex !== -1) {
-    dynamicSystemPrompt += `\n\nВНИМАНИЕ: Мы находимся в режиме сборки проекта по плану.
-    Сейчас выполняется ШАГ ${currentStepIndex + 1}: "${planSteps[currentStepIndex].text}".
-    Твоя задача — реализовать именно этот шаг. Когда шаг будет полностью выполнен, выведи в конце фразу "Шаг выполнен." для продвижения FSM автомата.`;
-  }
-
-  // Construct chat completion history with context-window safety
-  const compressed = compressHistory(activeProject!.chatHistory);
-  const modelInfo = settings.cachedModels.find(m => m.id === settings.model);
-  const maxCtx = modelInfo?.contextLength || 128000;
-  const fitted = fitToContext(
-    [{ role: 'system', content: dynamicSystemPrompt }, ...compressed],
-    maxCtx,
-    settings.maxTokens || 4096
-  );
-  const messages = fitted;
-
-  try {
-    const result = await streamChatCompletionWithFallback(messages);
+    agentStepCount++;
+    showThinking();
     
+    if (appMode === 'plan' && !planApproved) {
+      setCurrentAction('🧠 Планирование...');
+    } else if (isExecutingPlan && currentStepIndex >= 0) {
+      setCurrentAction(`📋 Шаг ${currentStepIndex + 1}: ${planSteps[currentStepIndex]?.text || ''}`);
+    } else {
+      setCurrentAction('🔧 Выполнение задачи...');
+    }
+
+    // Detect dynamic skills
+    let workspaceFiles: any[] = [];
+    if (activeProject && activeProject.workspacePath) {
+      try {
+        workspaceFiles = await window.electronAPI.readDir(activeProject.workspacePath);
+      } catch (e) {}
+    }
+    const lastUserMsg = activeProject!.chatHistory.filter(m => m.role === 'user').pop()?.content || '';
+    const activeSkills = detectActiveSkills(lastUserMsg, workspaceFiles);
+
+    let dynamicSystemPrompt = appMode === 'plan' && !planApproved ? SYSTEM_PROMPT_PLAN : SYSTEM_PROMPT_BUILD;
+    dynamicSystemPrompt = await injectMcpToolsIntoPrompt(dynamicSystemPrompt);
+
+    // Language-aware addendum: tell the model to answer in the user's UI language.
+    const lang = settings.language || 'ru';
+    if (lang === 'en') {
+      dynamicSystemPrompt += '\n\n## LANGUAGE: Reply in clear, concise English. UI strings in code may stay in any language the user prefers.';
+    } else if (lang === 'zh') {
+      dynamicSystemPrompt += '\n\n## 语言：用简洁的中文回复用户。代码中的 UI 字符串可以保留用户偏好的任何语言。';
+    } // ru — default; existing prompts already require Russian
+
+    // Inject the user-defined system prompt override, if set in Settings
+    if (settings.systemPrompt && settings.systemPrompt.trim() && settings.systemPrompt !== DEFAULT_SYSTEM_PROMPT) {
+      dynamicSystemPrompt += `\n\n## ПОЛЬЗОВАТЕЛЬСКИЕ ПРАВИЛА (custom system prompt)\n${settings.systemPrompt.trim()}`;
+    }
+    
+    // Inject User Profile preferences
+    let profile = { codingStyle: '', libraries: [] as string[], customNotes: '' };
+    try {
+      const saved = localStorage.getItem('ag_user_profile');
+      if (saved) profile = JSON.parse(saved);
+    } catch (e) {}
+
+    if (profile.codingStyle || (profile.libraries && profile.libraries.length > 0) || profile.customNotes) {
+      dynamicSystemPrompt += '\n\n## ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ И ПРЕДПОЧТЕНИЯ (User Model)\nУчитывай следующие требования пользователя при написании кода:\n';
+      if (profile.codingStyle) dynamicSystemPrompt += `- Стиль кода: ${profile.codingStyle}\n`;
+      if (profile.libraries && profile.libraries.length > 0) dynamicSystemPrompt += `- Библиотеки: ${profile.libraries.join(', ')}\n`;
+      if (profile.customNotes) dynamicSystemPrompt += `- Примечания: ${profile.customNotes}\n`;
+    }
+
+    if (activeSkills.length > 0) {
+      dynamicSystemPrompt += '\n\nПОДКЛЮЧЕННЫЕ НАВЫКИ И ПРАВИЛА:\n';
+      for (const skill of activeSkills) {
+        dynamicSystemPrompt += `\n--- НАВЫК: ${skill.name} ---\n${skill.content}\n`;
+      }
+    }
+
+    // Inject Plan-mode specific prompt configurations
+    if (appMode === 'plan' && !planApproved) {
+      dynamicSystemPrompt += `\n\nВНИМАНИЕ: Пользователь хочет спроектировать/спланировать проект. Твоя единственная задача на этом этапе — составить пошаговый план разработки.
+      Ты ДОЛЖЕН перечислить все необходимые шаги внутри специальных XML-тегов:
+      <plan>
+        <step>Описание шага 1</step>
+        <step>Описание шага 2</step>
+      </plan>
+      Не пиши исходный код и не вызывай инструменты записи/изменения файлов (<write_file> и <edit_file>). Только подготовить план. Отвечай кратко на русском языке.`;
+    } else if (isExecutingPlan && currentStepIndex !== -1) {
+      dynamicSystemPrompt += `\n\nВНИМАНИЕ: Мы находимся в режиме сборки проекта по плану.
+      Сейчас выполняется ШАГ ${currentStepIndex + 1}: "${planSteps[currentStepIndex].text}".
+      Твоя задача — реализовать именно этот шаг. Когда шаг будет полностью выполнен, выведи в конце фразу "Шаг выполнен." для продвижения FSM автомата.`;
+    }
+
+    // Construct chat completion history with context-window safety
+    const compressed = compressHistory(activeProject!.chatHistory);
+    const modelInfo = settings.cachedModels.find(m => m.id === settings.model);
+    const maxCtx = modelInfo?.contextLength || 128000;
+    const fitted = fitToContext(
+      [{ role: 'system', content: dynamicSystemPrompt }, ...compressed],
+      maxCtx,
+      settings.maxTokens || 4096
+    );
+    const messages = fitted;
+
+    let result: any = null;
+    try {
+      result = await streamChatCompletionWithFallback(messages);
+    } catch (innerError: any) {
+      if (innerError?.message === 'Генерация прервана.') {
+        setGeneratingState(false);
+        return;
+      }
+      throw innerError;
+    }
+      
     // Update token stats with usage from this response
     if (result.usage) {
       updateTokenStats(result.usage.prompt_tokens || 0, result.usage.completion_tokens || 0);
@@ -3462,10 +3471,9 @@ async function runAgentStep() {
     }
   } catch (error: any) {
     setGeneratingState(false);
-    if (error.message !== 'Генерация прервана.') {
-      showResumeCard(error.message);
-      playNotificationSound();
-    }
+    console.error('Agent loop crashed:', error);
+    showResumeCard(error?.message || String(error));
+    playNotificationSound();
   }
 }
 
@@ -5514,6 +5522,13 @@ function init() {
       const startX = e.clientX;
       const startWidth = chatPanel.offsetWidth;
 
+      const dragOverlay = document.createElement('div');
+      dragOverlay.style.position = 'fixed';
+      dragOverlay.style.inset = '0';
+      dragOverlay.style.zIndex = '999999';
+      dragOverlay.style.cursor = 'ew-resize';
+      document.body.appendChild(dragOverlay);
+
       const onMove = (ev: MouseEvent) => {
         const newWidth = startWidth + (ev.clientX - startX);
         const minW = parseInt(getComputedStyle(chatPanel).minWidth) || 280;
@@ -5522,6 +5537,7 @@ function init() {
       };
       const onUp = () => {
         resizeHandle.classList.remove('active');
+        dragOverlay.remove();
         localStorage.setItem('ag_chat_width', String(chatPanel.offsetWidth));
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
