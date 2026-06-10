@@ -4,6 +4,15 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.3.1] - 2026-06-10
+
+This hotfix release adds a provider header to the top of the model selection dropdown.
+
+### Fixed
+*   **Model Selector UI:** The model selector now explicitly indicates the active provider (e.g., OpenRouter or Ollama) at the top of the list, preventing confusion about the source of the models.
+
+---
+
 ## [1.3.0] - 2026-06-10
 
 This major release introduces the industry-standard Monaco Editor for syntax highlighting, integrates xterm.js for a robust terminal experience, and improves the overall UX logic.

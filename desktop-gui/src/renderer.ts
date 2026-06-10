@@ -794,6 +794,12 @@ function populateModelSelect(models: ModelInfo[], selectedId?: string) {
     });
   }
 
+  // Add provider header at the top
+  const providerHeader = document.createElement('option');
+  providerHeader.disabled = true;
+  providerHeader.textContent = `=== Провайдер: ${settings.llmProvider === 'openrouter' ? 'OpenRouter' : 'Ollama'} ===`;
+  modelSelect.appendChild(providerHeader);
+
   // Group by provider
   const groups: Record<string, ModelInfo[]> = {};
   for (const m of models) {
