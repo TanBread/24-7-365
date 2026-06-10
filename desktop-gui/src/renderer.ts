@@ -2410,7 +2410,7 @@ async function markStepCompleted(planId: string, idx: number) {
           const stepText = planSteps[idx].text;
           appendBubble('Система', `🤖 ${t('Генерирую коммит для шага:')} "${stepText}"...`, true);
           const commitMsg = await generateCommitMessage(diff, stepText);
-          const commitRes = await window.electronAPI.executeCommand(`git commit -m "[AI] ${commitMsg.replace(/"/g, '\\"')}"`, activeProject.workspacePath);
+          const commitRes = await window.electronAPI.executeCommand(`git commit -m "[AI] ${commitMsg.replace(/"/g, "'")}"`, activeProject.workspacePath);
           
           if (commitRes.code === 0) {
             appendBubble('Система', `✅ ${t('Авто-коммит успешно создан:')} <code>[AI] ${commitMsg}</code>`, true);
@@ -5787,18 +5787,20 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
     
     paneLeft.addEventListener('scroll', () => {
       if (isScrollingRight) return;
+      if (paneRight.scrollTop === paneLeft.scrollTop && paneRight.scrollLeft === paneLeft.scrollLeft) return;
       isScrollingLeft = true;
       paneRight.scrollTop = paneLeft.scrollTop;
       paneRight.scrollLeft = paneLeft.scrollLeft;
-      isScrollingLeft = false;
+      setTimeout(() => { isScrollingLeft = false; }, 20);
     });
     
     paneRight.addEventListener('scroll', () => {
       if (isScrollingLeft) return;
+      if (paneLeft.scrollTop === paneRight.scrollTop && paneLeft.scrollLeft === paneRight.scrollLeft) return;
       isScrollingRight = true;
       paneLeft.scrollTop = paneRight.scrollTop;
       paneLeft.scrollLeft = paneRight.scrollLeft;
-      isScrollingRight = false;
+      setTimeout(() => { isScrollingRight = false; }, 20);
     });
   }
 
