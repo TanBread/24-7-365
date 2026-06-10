@@ -7,8 +7,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../dist/renderer.css">
   <link rel="stylesheet" href="styles.css">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="../dist/vs/loader.js"></script>
+  <script>
+    require.config({ paths: { 'vs': '../dist/vs' } });
+    window.MonacoEnvironment = { getWorkerUrl: () => proxy };
+    let proxy = URL.createObjectURL(new Blob([`
+      self.MonacoEnvironment = {
+        baseUrl: '../dist/'
+      };
+      importScripts('../dist/vs/base/worker/workerMain.js');
+    `], { type: 'text/javascript' }));
+  </script>
 </head>
 <body>
   <div class="app-container">
@@ -858,23 +870,7 @@
           Файл: <span id="diff-file-path" style="font-weight: 600;">src/index.html</span>
         </div>
         <div class="diff-panes-container" style="flex: 1; display: flex; overflow: hidden; position: relative;">
-          
-          <!-- Left Pane (Original) -->
-          <div class="diff-pane" id="diff-pane-left" style="flex: 1; overflow: auto; border-right: 1px solid var(--border-default); background: var(--bg-panel);">
-            <div class="diff-pane-header" style="position: sticky; top: 0; background: var(--bg-panel-alt); padding: 6px 14px; font-size: 11px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border-default); z-index: 10;">
-              Оригинал (Original)
-            </div>
-            <pre class="diff-code-content" id="diff-code-left" style="margin: 0; padding: 10px; font-family: var(--font-code); font-size: 12px; line-height: 1.5;"></pre>
-          </div>
-
-          <!-- Right Pane (Modified) -->
-          <div class="diff-pane" id="diff-pane-right" style="flex: 1; overflow: auto; background: var(--bg-panel);">
-            <div class="diff-pane-header" style="position: sticky; top: 0; background: var(--bg-panel-alt); padding: 6px 14px; font-size: 11px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border-default); z-index: 10;">
-              Изменено (Modified)
-            </div>
-            <pre class="diff-code-content" id="diff-code-right" style="margin: 0; padding: 10px; font-family: var(--font-code); font-size: 12px; line-height: 1.5;"></pre>
-          </div>
-
+          <div id="monaco-diff-container" style="flex: 1; min-height: 400px; width: 100%;"></div>
         </div>
       </div>
       <div class="modal-footer" style="padding: 14px 20px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--border-default);">

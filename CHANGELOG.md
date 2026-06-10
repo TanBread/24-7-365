@@ -4,6 +4,20 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.3.0] - 2026-06-10
+
+This major release introduces the industry-standard Monaco Editor for syntax highlighting, integrates xterm.js for a robust terminal experience, and improves the overall UX logic.
+
+### Added
+*   **Monaco Editor Integration:** Replaced the custom text diff viewer with Monaco Editor (the same engine powering VS Code) for highly accurate syntax highlighting, diff rendering, and large file support.
+*   **xterm.js Terminal:** Upgraded the internal live terminal to use xterm.js. It now handles advanced formatting, colors, and dynamic resizing just like a native OS terminal.
+*   **Remove Favorite Models:** Added a close (x) button on favorite model pills to quickly unpin them from your workspace.
+
+### Refactored & Polished
+*   **UX/UI Enhancements:** General stability improvements to the IDE layout, localized components, and underlying React architecture.
+
+---
+
 ## [1.2.2] - 2026-06-10
 
 This release refines terminal interactions, git integration, diff readability, local LLM options, and updates branding graphics.

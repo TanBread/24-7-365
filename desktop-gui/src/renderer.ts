@@ -6,6 +6,9 @@
 import { compressCodeContext, checkBalancedBrackets } from './lib/codeUtils';
 import { t, setLang, translateDOM, Lang } from './lib/i18n';
 import { TOOL_SCHEMAS } from './lib/toolSchemas';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 
 declare global {
   interface Window {
@@ -3813,30 +3816,76 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
 
 
 // ═══════════════════════════════════════════
-// LIVE TERMINAL PANEL
+// LIVE TERMINAL PANEL (XTERM.JS)
 // ═══════════════════════════════════════════
+let term: Terminal | null = null;
+let fitAddon: FitAddon | null = null;
 let terminalHasContent = false;
 
-function appendTerminal(stream: string, chunk: string) {
+function initTerminal() {
+  if (term) return;
   const out = document.getElementById('terminal-output');
   if (!out) return;
+  out.innerHTML = '';
+  
+  term = new Terminal({
+    theme: {
+      background: 'transparent',
+      foreground: '#d4d4d4',
+      cursor: '#ffffff',
+    },
+    fontFamily: 'var(--font-code), monospace',
+    fontSize: 12,
+    cursorBlink: true,
+    disableStdin: true // Output only for now, input handled by input bar
+  });
+  
+  fitAddon = new FitAddon();
+  term.loadAddon(fitAddon);
+  term.open(out);
+  fitAddon.fit();
+  
+  window.addEventListener('resize', () => {
+    if (fitAddon && document.getElementById('terminal-view')?.style.display !== 'none') {
+      fitAddon.fit();
+    }
+  });
+
+  // Watch for tab visibility changes
+  const observer = new MutationObserver(() => {
+    if (document.getElementById('terminal-view')?.style.display !== 'none') {
+      setTimeout(() => fitAddon?.fit(), 50);
+    }
+  });
+  observer.observe(document.getElementById('terminal-view')!, { attributes: true, attributeFilter: ['style'] });
+}
+
+function appendTerminal(stream: string, chunk: string) {
+  if (!term) initTerminal();
+  if (!term) return;
+  
   if (!terminalHasContent) {
-    out.innerHTML = '';
+    term.clear();
     terminalHasContent = true;
   }
-  const span = document.createElement('span');
-  span.className = stream === 'stderr' ? 'term-stderr' : stream === 'system' ? 'term-system' : 'term-stdout';
-  span.textContent = chunk;
-  out.appendChild(span);
-  out.scrollTop = out.scrollHeight;
+  
+  // Format based on stream
+  let formatted = chunk.replace(/\n/g, '\r\n');
+  if (stream === 'stderr') {
+    formatted = `\x1b[31m${formatted}\x1b[0m`; // Red
+  } else if (stream === 'system') {
+    formatted = `\x1b[33m${formatted}\x1b[0m`; // Yellow
+  }
+  
+  term.write(formatted);
 }
 
 function clearTerminal() {
-  const out = document.getElementById('terminal-output');
-  if (out) {
-    out.innerHTML = '<div class="terminal-empty">Здесь появляется живой вывод команд, которые запускает агент.</div>';
-    terminalHasContent = false;
+  if (term) {
+    term.clear();
+    term.write('\x1b[3mЗдесь появляется живой вывод команд, которые запускает агент.\x1b[0m\r\n');
   }
+  terminalHasContent = false;
 }
 
 function setTerminalStatus(text: string) {
@@ -4312,128 +4361,66 @@ function alignLines(oldLines: string[], newLines: string[]): { left: (string | n
     right: rightAligned.reverse()
   };
 }
-
-function highlightCodeLine(line: string, filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase() || '';
-  let escaped = esc(line);
-  
-  if (['js', 'ts', 'jsx', 'tsx', 'json', 'py', 'css', 'html', 'md', 'rs', 'go', 'java', 'c', 'cpp', 'cs', 'sh', 'bat'].includes(ext)) {
-    if (ext === 'json') {
-      escaped = escaped.replace(/(^|[^\\\\])&quot;([^&]+?)&quot;\s*:/g, '$1<span class="token-key">&quot;$2&quot;</span>:');
-      escaped = escaped.replace(/:(\s*)&quot;([^&]*?)&quot;/g, ':$1<span class="token-string">&quot;$2&quot;</span>');
-      escaped = escaped.replace(/\b(true|false|null|\d+)\b/g, '<span class="token-value">$1</span>');
-      return escaped;
-    }
-    
-    if (ext === 'css') {
-      escaped = escaped.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="token-comment">$1</span>');
-      escaped = escaped.replace(/([a-zA-Z\-]+)\s*:/g, '<span class="token-property">$1</span>:');
-      escaped = escaped.replace(/:\s*([^;]+);/g, ': <span class="token-value">$1</span>;');
-      return escaped;
-    }
-    
-    if (ext === 'html') {
-      escaped = escaped.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="token-comment">$1</span>');
-      escaped = escaped.replace(/(&lt;\/?[a-zA-Z0-9\-]+)/g, '<span class="token-tag">$1</span>');
-      escaped = escaped.replace(/([a-zA-Z0-9\-]+)=(&quot;[^&]*?&quot;)/g, '<span class="token-attr">$1</span>=<span class="token-string">$2</span>');
-      return escaped;
-    }
-
-    let hasComment = false;
-    let commentPart = '';
-    
-    if (ext === 'py') {
-      const hashIdx = escaped.indexOf('#');
-      if (hashIdx !== -1) {
-        const code = escaped.substring(0, hashIdx);
-        const comment = escaped.substring(hashIdx);
-        escaped = code;
-        commentPart = `<span class="token-comment">${comment}</span>`;
-        hasComment = true;
-      }
-    } else {
-      const dslashIdx = escaped.indexOf('//');
-      if (dslashIdx !== -1) {
-        const code = escaped.substring(0, dslashIdx);
-        const comment = escaped.substring(dslashIdx);
-        escaped = code;
-        commentPart = `<span class="token-comment">${comment}</span>`;
-        hasComment = true;
-      }
-    }
-
-    const strings: string[] = [];
-    escaped = escaped.replace(/(&quot;.*?&quot;|&#39;.*?&#39;|&grave;.*?&grave;)/g, (match) => {
-      strings.push(`<span class="token-string">${match}</span>`);
-      return `___STR_TOKEN_${strings.length - 1}___`;
-    });
-
-    const keywords = [
-      'const', 'let', 'var', 'function', 'class', 'return', 'if', 'else', 'for', 'while', 'do',
-      'switch', 'case', 'break', 'continue', 'default', 'import', 'export', 'from', 'as', 'new',
-      'this', 'super', 'extends', 'implements', 'interface', 'type', 'async', 'await', 'try', 'catch',
-      'finally', 'throw', 'yield', 'public', 'private', 'protected', 'static', 'readonly', 'null',
-      'undefined', 'true', 'false', 'def', 'elif', 'in', 'is', 'not', 'and', 'or', 'lambda', 'with',
-      'pass', 'fn', 'mut', 'pub', 'use', 'impl', 'struct', 'enum', 'match', 'package', 'func', 'go',
-      'chan', 'select', 'map'
-    ];
-    
-    const keywordRegex = new RegExp(`\\b(${keywords.join('|')})\\b`, 'g');
-    escaped = escaped.replace(keywordRegex, '<span class="token-keyword">$1</span>');
-    escaped = escaped.replace(/\b(\d+)\b/g, '<span class="token-number">$1</span>');
-
-    for (let j = 0; j < strings.length; j++) {
-      escaped = escaped.replace(`___STR_TOKEN_${j}___`, strings[j]);
-    }
-
-    if (hasComment) {
-      escaped = escaped + commentPart;
-    }
-  }
-  
-  return escaped;
-}
+let monacoDiffEditor: any = null;
+let monacoOriginalModel: any = null;
+let monacoModifiedModel: any = null;
 
 function buildSideBySideDiff(filePath: string, oldContent: string, newContent: string) {
-  const oldLines = oldContent ? oldContent.split('\n') : [];
-  const newLines = newContent ? newContent.split('\n') : [];
-  const { left, right } = alignLines(oldLines, newLines);
-  
-  const leftPane = document.getElementById('diff-code-left');
-  const rightPane = document.getElementById('diff-code-right');
   const filePathEl = document.getElementById('diff-file-path');
-  
   if (filePathEl) filePathEl.textContent = filePath;
-  
-  let leftHTML = '';
-  let rightHTML = '';
-  let leftLineNum = 1;
-  let rightLineNum = 1;
-  
-  const len = left.length;
-  for (let i = 0; i < len; i++) {
-    const l = left[i];
-    const r = right[i];
+
+  const initDiffEditor = () => {
+    const container = document.getElementById('monaco-diff-container');
+    if (!container) return;
     
-    if (l === null && r !== null) {
-      leftHTML += `<div class="diff-line empty-slot"><div class="diff-line-num">&nbsp;</div><div class="diff-line-content">&nbsp;</div></div>`;
-      rightHTML += `<div class="diff-line added"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${highlightCodeLine(r, filePath)}</div></div>`;
-    } else if (l !== null && r === null) {
-      leftHTML += `<div class="diff-line removed"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${highlightCodeLine(l, filePath)}</div></div>`;
-      rightHTML += `<div class="diff-line empty-slot"><div class="diff-line-num">&nbsp;</div><div class="diff-line-content">&nbsp;</div></div>`;
-    } else if (l !== null && r !== null) {
-      if (l === r) {
-        leftHTML += `<div class="diff-line"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${highlightCodeLine(l, filePath)}</div></div>`;
-        rightHTML += `<div class="diff-line"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${highlightCodeLine(r, filePath)}</div></div>`;
-      } else {
-        leftHTML += `<div class="diff-line removed"><div class="diff-line-num">${leftLineNum++}</div><div class="diff-line-content">${highlightCodeLine(l, filePath)}</div></div>`;
-        rightHTML += `<div class="diff-line added"><div class="diff-line-num">${rightLineNum++}</div><div class="diff-line-content">${highlightCodeLine(r, filePath)}</div></div>`;
-      }
+    // Determine language by extension
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    let lang = 'text';
+    const langMap: Record<string, string> = {
+      'ts': 'typescript', 'js': 'javascript', 'tsx': 'typescript', 'jsx': 'javascript',
+      'json': 'json', 'html': 'html', 'css': 'css', 'py': 'python', 'rs': 'rust',
+      'go': 'go', 'md': 'markdown', 'c': 'c', 'cpp': 'cpp', 'java': 'java'
+    };
+    if (langMap[ext]) lang = langMap[ext];
+
+    if (!monacoDiffEditor) {
+      monacoDiffEditor = (window as any).monaco.editor.createDiffEditor(container, {
+        theme: document.body.classList.contains('theme-dark') ? 'vs-dark' : 'vs',
+        readOnly: true,
+        automaticLayout: true,
+        renderSideBySide: true,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        fontFamily: 'var(--font-code), monospace',
+        fontSize: 12
+      });
+      monacoOriginalModel = (window as any).monaco.editor.createModel(oldContent || '', lang);
+      monacoModifiedModel = (window as any).monaco.editor.createModel(newContent || '', lang);
+      monacoDiffEditor.setModel({
+        original: monacoOriginalModel,
+        modified: monacoModifiedModel
+      });
+    } else {
+      (window as any).monaco.editor.setModelLanguage(monacoOriginalModel, lang);
+      (window as any).monaco.editor.setModelLanguage(monacoModifiedModel, lang);
+      monacoOriginalModel.setValue(oldContent || '');
+      monacoModifiedModel.setValue(newContent || '');
+    }
+  };
+
+  if ((window as any).monaco) {
+    initDiffEditor();
+  } else {
+    // Try to load via AMD loader
+    if ((window as any).require) {
+      (window as any).require(['vs/editor/editor.main'], () => {
+        initDiffEditor();
+      });
+    } else {
+      const c = document.getElementById('monaco-diff-container');
+      if (c) c.innerHTML = '<div style="padding:20px; color:red;">Ошибка загрузки редактора (Monaco loader not found)</div>';
     }
   }
-  
-  if (leftPane) leftPane.innerHTML = leftHTML;
-  if (rightPane) rightPane.innerHTML = rightHTML;
 }
 
 function requestWritePermissionWithDiff(filePath: string, oldContent: string, newContent: string): Promise<boolean> {
@@ -4540,6 +4527,9 @@ $$('.ptab').forEach(t => t.addEventListener('click', () => {
   $$('.ptab').forEach(x => x.classList.remove('active')); 
   t.classList.add('active'); 
   renderPreview();
+  if ((t as HTMLElement).dataset.tab === 'terminal') {
+    setTimeout(() => { initTerminal(); }, 50);
+  }
 }));
 
 // Device toggle
@@ -5555,8 +5545,30 @@ function init() {
       
       const pill = document.createElement('div');
       pill.className = 'fav-model-pill' + (settings.model === mId ? ' active' : '');
+      
       const cleanName = (modelInfo.name || modelInfo.id).split(' · ')[0];
-      pill.textContent = cleanName;
+      const span = document.createElement('span');
+      span.textContent = cleanName;
+      pill.appendChild(span);
+      
+      const delBtn = document.createElement('div');
+      delBtn.title = 'Удалить из избранного';
+      delBtn.innerHTML = '<i data-lucide="x" style="width: 12px; height: 12px;"></i>';
+      delBtn.style.display = 'flex';
+      delBtn.style.alignItems = 'center';
+      delBtn.style.justifyContent = 'center';
+      delBtn.style.opacity = '0.6';
+      delBtn.style.marginLeft = '2px';
+      delBtn.addEventListener('mouseenter', () => delBtn.style.opacity = '1');
+      delBtn.addEventListener('mouseleave', () => delBtn.style.opacity = '0.6');
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        settings.favoriteModels = settings.favoriteModels.filter(id => id !== mId);
+        saveSettings();
+        renderFavoriteModelsPills();
+        updateFavoriteModelStarUI();
+      });
+      pill.appendChild(delBtn);
       
       pill.addEventListener('click', () => {
         settings.model = mId;
@@ -5571,6 +5583,12 @@ function init() {
       });
       container.appendChild(pill);
     }
+    
+    setTimeout(() => {
+      if ((window as any).lucide) {
+        (window as any).lucide.createIcons();
+      }
+    }, 10);
   }
 
   function updateFavoriteModelStarUI() {
