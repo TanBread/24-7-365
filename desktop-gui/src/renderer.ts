@@ -1384,6 +1384,12 @@ function setupAutoUpdaterUI() {
       banner?.querySelector('#updater-dismiss-btn')?.addEventListener('click', close);
     } else if (data.type === 'error') {
       console.warn('[updater] error:', data.message);
+      setHTML(`
+        <i data-lucide="alert-triangle" style="color: var(--accent-red);"></i>
+        <span class="updater-text">${esc(t('Ошибка обновления'))}: ${esc(data.message)}</span>
+        <button class="ghost-btn updater-btn" id="updater-dismiss-btn"><i data-lucide="x"></i></button>
+      `);
+      banner?.querySelector('#updater-dismiss-btn')?.addEventListener('click', close);
     }
     // 'checking' / 'none' — silent
   });

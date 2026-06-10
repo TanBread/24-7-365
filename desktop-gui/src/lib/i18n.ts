@@ -192,6 +192,7 @@ const DICT: Record<string, [string, string]> = {
   'Сервер с таким именем уже существует': ['A server with this name already exists', '同名服务器已存在'],
   'Удаление MCP сервера': ['Delete MCP Server', '删除 MCP 服务器'],
   'Список MCP серверов пуст.': ['MCP servers list is empty.', 'MCP 服务器列表为空。'],
+  'Ошибка обновления': ['Update error', '更新错误'],
   'Имя сервера': ['Server Name', '服务器名称'],
   'Активен': ['Active', '启用'],
   'Команда': ['Command', '命令'],
