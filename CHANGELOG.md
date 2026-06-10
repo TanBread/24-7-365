@@ -4,7 +4,7 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
-## [1.1.0] - 2026-06-10
+## [1.2.0] - 2026-06-10
 
 This release focuses on adding local offline capabilities, developer tools extension, git automation, interactive commands execution, visual diff inspections, and bug fixes for the Windows auto-updater.
 
@@ -15,6 +15,17 @@ This release focuses on adding local offline capabilities, developer tools exten
 *   **Interactive Terminal Stdin:** Type inputs into active terminal processes (e.g. CLI prompts, y/n confirmations) directly from the IDE using the new terminal input bar.
 *   **Fullscreen Side-by-Side Diff:** Replaced inline diff cards with a full-size modal overlay utilizing LCS line alignment to show original and modified code side-by-side.
 *   **Windows Code Signature Updater Fix:** Bypassed signature checks to restore auto-updates for unsigned executables.
+
+### Refactored & Polished
+*   **i18n Translation additions:** Added localized strings for new features in Russian, English, and Chinese.
+
+---
+
+## [1.1.0] - 2026-06-10
+
+This release focuses on improving background execution, quick access workflows, multi-monitor preview capabilities, and overall UI/UX refinements.
+
+### Added
 *   **Tray Minimization:** Close the main window to keep 7/24 IDE running in the system tray. Restore it instantly from the tray icon or right-click to exit completely. Toggle this preference in *Settings -> General*.
 *   **Native System Notifications:** Receive OS-level desktop notifications when:
     *   A long-running plan/build completes successfully.
@@ -26,7 +37,6 @@ This release focuses on adding local offline capabilities, developer tools exten
 
 ### Refactored & Polished
 *   **Light Theme Polish:** Re-designed the application branding with flat, borderless light theme social previews and clean high-resolution logo files.
-*   **i18n Translation additions:** Added localized strings for new features in Russian, English, and Chinese.
 
 ---
 

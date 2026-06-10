@@ -1,6 +1,6 @@
 {
   "name": "seven24-ide",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Desktop AI coding agent. Describe what you want to build — the agent reads your files, writes code, runs commands, and shows the result.",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
