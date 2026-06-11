@@ -135,30 +135,6 @@
           <span id="current-action-text"></span>
         </div>
         <div class="chat-input-area">
-          <div class="input-context-bar">
-            <div class="chat-model-select-wrap" title="Модель ИИ для этого чата">
-              <i data-lucide="sparkles" style="width:11px;height:11px;color:var(--text-muted);"></i>
-              <select id="chat-model-select" class="chat-model-select"></select>
-              <button id="btn-toggle-favorite-model" class="ghost-btn tiny" title="Закрепить модель" style="padding: 2px 4px; display: flex; align-items: center; justify-content: center; height: 18px; width: 18px; margin-left: 2px;"><i data-lucide="star" style="width: 12px; height: 12px;"></i></button>
-            </div>
-            <div class="favorite-models-pills" id="favorite-models-pills"></div>
-            <div class="context-bar-wrap" id="context-bar-wrap">
-              <span class="context-bar-label" id="context-bar-label">0 / 128K</span>
-              <div class="context-bar-track"><div class="context-bar-fill" id="context-bar-fill"></div></div>
-            </div>
-            <div class="context-row-3 hidden" id="selected-component-bar">
-              <span class="context-label"><i data-lucide="tag"></i> <span id="selected-component-name">Компонент не выбран</span></span>
-              <button id="btn-clear-selected-component" class="ghost-btn tiny" style="padding: 2px 4px; display: flex; align-items: center; justify-content: center; height: 16px; width: 16px; border-radius: 50%;" title="Очистить выбор"><i data-lucide="x" style="width: 10px; height: 10px;"></i></button>
-            </div>
-          </div>
-          <div class="input-mode-toggle" id="input-mode-toggle">
-            <button class="mode-tab active" data-mode="build" id="mode-tab-build" title="Build — агент сразу пишет и правит код">
-              <i data-lucide="zap"></i><span>Build</span>
-            </button>
-            <button class="mode-tab" data-mode="plan" id="mode-tab-plan" title="Plan — сначала составить пошаговый план, затем собрать">
-              <i data-lucide="map"></i><span>Plan</span>
-            </button>
-          </div>
           <div class="attached-files-bar hidden" id="attached-files-bar"></div>
           <div class="pinned-files-bar hidden" id="pinned-files-bar">
             <span class="pinned-files-label"><i data-lucide="pin"></i> Закреплено:</span>
@@ -167,15 +143,45 @@
           <div class="input-wrapper">
             <textarea id="chat-input" placeholder="Опишите, что хотите создать или исправить..." rows="1"></textarea>
             <div id="at-references" class="at-references hidden"></div>
-            <button id="btn-stop-generation" class="stop-btn hidden" title="Остановить генерацию">
-              <i data-lucide="square"></i>
-            </button>
-            <button id="btn-send" class="send-btn" title="Отправить (Enter)">
-              <i data-lucide="arrow-up"></i>
-            </button>
           </div>
-          <div class="input-hint">Нажмите <kbd>Enter</kbd> чтобы отправить, <kbd>Shift+Enter</kbd> для новой строки</div>
+          <div class="input-actions-row">
+            <div class="input-actions-left">
+              <div class="chat-model-select-wrap" title="Модель ИИ для этого чата">
+                <i data-lucide="sparkles" style="width:11px;height:11px;color:var(--text-muted);"></i>
+                <select id="chat-model-select" class="chat-model-select"></select>
+                <button id="btn-toggle-favorite-model" class="ghost-btn tiny" title="Закрепить модель" style="padding: 2px 4px; display: flex; align-items: center; justify-content: center; height: 18px; width: 18px; margin-left: 2px;"><i data-lucide="star" style="width: 12px; height: 12px;"></i></button>
+              </div>
+              <div class="favorite-models-pills" id="favorite-models-pills"></div>
+              <div class="context-bar-wrap" id="context-bar-wrap">
+                <span class="context-bar-label" id="context-bar-label">0 / 128K</span>
+                <div class="context-bar-track"><div class="context-bar-fill" id="context-bar-fill"></div></div>
+              </div>
+            </div>
+            <div class="input-actions-right">
+              <div class="input-mode-toggle" id="input-mode-toggle">
+                <button class="mode-tab active" data-mode="build" id="mode-tab-build" title="Build — агент сразу пишет и правит код">
+                  <i data-lucide="zap"></i><span>Build</span>
+                </button>
+                <button class="mode-tab" data-mode="plan" id="mode-tab-plan" title="Plan — сначала составить пошаговый план, затем собрать">
+                  <i data-lucide="map"></i><span>Plan</span>
+                </button>
+              </div>
+              <div class="input-buttons-group">
+                <button id="btn-stop-generation" class="stop-btn hidden" title="Остановить генерацию">
+                  <i data-lucide="square"></i>
+                </button>
+                <button id="btn-send" class="send-btn" title="Отправить (Enter)">
+                  <i data-lucide="arrow-up"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="context-row-3 hidden" id="selected-component-bar">
+            <span class="context-label"><i data-lucide="tag"></i> <span id="selected-component-name">Компонент не выбран</span></span>
+            <button id="btn-clear-selected-component" class="ghost-btn tiny" style="padding: 2px 4px; display: flex; align-items: center; justify-content: center; height: 16px; width: 16px; border-radius: 50%;" title="Очистить выбор"><i data-lucide="x" style="width: 10px; height: 10px;"></i></button>
+          </div>
         </div>
+        <div class="input-hint">Нажмите <kbd>Enter</kbd> чтобы отправить, <kbd>Shift+Enter</kbd> для новой строки</div>
       </section>
 
       <!-- Resize Handle -->

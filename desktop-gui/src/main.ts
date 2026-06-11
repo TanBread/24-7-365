@@ -634,6 +634,19 @@ ipcMain.handle('open-in-explorer', async (_event, folderPath: string) => {
   return false;
 });
 
+// Open external URL in user's default browser
+ipcMain.handle('open-external', async (_event, url: string) => {
+  try {
+    if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:'))) {
+      await shell.openExternal(url);
+      return true;
+    }
+  } catch (err) {
+    console.error('Error opening external URL:', err);
+  }
+  return false;
+});
+
 // Native confirm dialog
 ipcMain.handle('show-confirm', async (_event, message: string, title: string) => {
   if (!mainWindow) return false;

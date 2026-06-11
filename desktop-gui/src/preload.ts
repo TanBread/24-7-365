@@ -60,6 +60,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openInExplorer: (folderPath: string) =>
     ipcRenderer.invoke('open-in-explorer', folderPath),
 
+  // Open external URL in user's default browser
+  openExternal: (url: string) =>
+    ipcRenderer.invoke('open-external', url),
+
   // Check image size
   checkImageSize: (filePath: string, workspacePath: string) =>
     ipcRenderer.invoke('check-image-size', filePath, workspacePath),

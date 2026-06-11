@@ -9,6 +9,7 @@ import { TOOL_SCHEMAS } from './lib/toolSchemas';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { marked } from 'marked';
 
 declare global {
   interface Window {
@@ -17,6 +18,7 @@ declare global {
       readDir: (workspacePath: string) => Promise<{ path: string; isDir: boolean; size: number }[]>;
       readFile: (filePath: string, workspacePath: string, sandbox: boolean) => Promise<string>;
       writeFile: (filePath: string, content: string, workspacePath: string, sandbox: boolean) => Promise<boolean>;
+      openExternal: (url: string) => Promise<boolean>;
       executeCommand: (command: string, workspacePath: string) => Promise<{ code: number; stdout: string; stderr: string }>;
       executeCommandStream: (command: string, workspacePath: string, execId: string) => Promise<{ code: number; stdout: string; stderr: string }>;
       onCommandChunk: (callback: (data: { execId: string; stream: string; chunk: string }) => void) => () => void;
@@ -1060,6 +1062,79 @@ function parseXmlAttrs(attrString: string): Record<string, string> {
   return attrs;
 }
 
+const markedRenderer = new marked.Renderer();
+
+// Custom link renderer: open external links in browser, files in Monaco editor
+markedRenderer.link = (href, title, text) => {
+  const cleanHref = href || '';
+  if (cleanHref.startsWith('http://') || cleanHref.startsWith('https://') || cleanHref.startsWith('mailto:')) {
+    return `<a class="chat-external-link" href="${esc(cleanHref)}" title="${esc(cleanHref)}">${text}</a>`;
+  }
+  // Otherwise treat as file link
+  return `<a class="chat-file-link" data-path="${esc(cleanHref)}" href="#" title="${esc(t('Открыть файл'))}">${text}</a>`;
+};
+
+// Custom code renderer: add copy button and handle language or path header
+markedRenderer.code = (code, language) => {
+  const lang = (language || 'code').trim();
+  const highlighted = highlightCode(code, lang);
+  
+  let headerText = esc(lang);
+  let pathAttr = '';
+  // If language looks like a file path (contains '.' or '/')
+  if (lang.includes('.') || lang.includes('/')) {
+    headerText = `<span class="chat-file-link inline" data-path="${esc(lang)}">${esc(lang)}</span>`;
+    pathAttr = `data-path="${esc(lang)}"`;
+  }
+  
+  return `
+    <div class="code-block-chat" ${pathAttr}>
+      <div class="code-block-chat-header">
+        <span>${headerText}</span>
+        <button class="btn-copy-chat-code"><i data-lucide="copy"></i><span>${esc(t('Копировать'))}</span></button>
+      </div>
+      <pre><code>${highlighted}</code></pre>
+    </div>
+  `;
+};
+
+// Path regex to detect workspace file references in plain text
+const pathRegex = /\b([a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)+\.[a-zA-Z0-9_-]+|[a-zA-Z0-9_.-]+\.(?:ts|js|json|css|html|toml|rs|md|txt|py|sh|go))\b/g;
+
+// Custom text renderer to dynamically turn raw file paths in plain text into links
+markedRenderer.text = (text) => {
+  return text.replace(pathRegex, (match) => {
+    if (/^\d+(\.\d+)+$/.test(match)) {
+      return esc(match);
+    }
+    return `<a class="chat-file-link" data-path="${esc(match)}" href="#" title="${esc(t('Открыть файл'))}">${esc(match)}</a>`;
+  });
+};
+
+// Configure marked with our custom renderer
+marked.use({
+  renderer: markedRenderer,
+  gfm: true,
+  breaks: true,
+});
+
+function isResponseTruncated(text: string): boolean {
+  const tags = ['think', 'write_file', 'edit_file', 'read_file', 'read_dir', 'execute_command', 'search_code'];
+  for (const tag of tags) {
+    const openCount = (text.match(new RegExp(`<${tag}\\b`, 'g')) || []).length;
+    const closeCount = (text.match(new RegExp(`</${tag}>`, 'g')) || []).length;
+    const selfCloseCount = (text.match(new RegExp(`<${tag}\\b[^>]*/>`, 'g')) || []).length;
+    if (openCount > (closeCount + selfCloseCount)) {
+      return true;
+    }
+  }
+  const backtickCount = (text.match(/```/g) || []).length;
+  if (backtickCount % 2 !== 0) {
+    return true;
+  }
+  return false;
+}
+
 function parseMarkdown(text: string): string {
   let tempText = text;
 
@@ -1112,138 +1187,13 @@ function parseMarkdown(text: string): string {
   tempText = tempText.replace(checkImgRegex, (match) => storePlaceholder(match));
   tempText = tempText.replace(orphanToolCloseRegex, '');
 
-  // Escape HTML contents for safety
-  let safeText = esc(tempText);
-
-  // 1. Code blocks: ```lang ... ```
-  const codeBlockRegex = /```(\w*)\n([\s\S]*?)(?:```|$)/g;
-  safeText = safeText.replace(codeBlockRegex, (match, lang, code) => {
-    return `__CODE_BLOCK_PLACEHOLDER_START__${lang || 'code'}__LANG_DELIM__${code}__CODE_BLOCK_PLACEHOLDER_END__`;
-  });
-
-  // 2. Inline code: `code`
-  safeText = safeText.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-
-  // 3. Bold & Italic
-  safeText = safeText.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
-  safeText = safeText.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-  safeText = safeText.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
-  safeText = safeText.replace(/_([^_]+)_/g, '<em>$1</em>');
-
-  // 4. Line-by-line block elements parsing (lists, headers, blockquotes, paragraphs)
-  const lines = safeText.split('\n');
-  let inList = false;
-  let listType: 'ul' | 'ol' | null = null;
-  
-  const formattedLines = lines.map((line) => {
-    const trimmed = line.trim();
-
-    if (line.includes('__CODE_BLOCK_PLACEHOLDER_START__')) {
-      if (inList) {
-        inList = false;
-        const close = listType === 'ol' ? '</ol>' : '</ul>';
-        listType = null;
-        return close + '\n' + line;
-      }
-      return line;
-    }
-
-    // Headers
-    if (trimmed.startsWith('#### ')) {
-      return `<h4>${trimmed.slice(5)}</h4>`;
-    }
-    if (trimmed.startsWith('### ')) {
-      return `<h3>${trimmed.slice(4)}</h3>`;
-    }
-    if (trimmed.startsWith('## ')) {
-      return `<h2>${trimmed.slice(3)}</h2>`;
-    }
-    if (trimmed.startsWith('# ')) {
-      return `<h1>${trimmed.slice(2)}</h1>`;
-    }
-
-    // Blockquotes
-    if (trimmed.startsWith('&gt; ')) {
-      return `<blockquote>${trimmed.slice(5)}</blockquote>`;
-    }
-
-    // Bulleted Lists
-    if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('+ ')) {
-      const itemText = trimmed.slice(2);
-      let result = '';
-      if (!inList || listType !== 'ul') {
-        if (inList) result += listType === 'ol' ? '</ol>' : '</ul>';
-        result += '<ul>';
-        inList = true;
-        listType = 'ul';
-      }
-      result += `<li>${itemText}</li>`;
-      return result;
-    }
-
-    // Numbered Lists
-    if (/^\d+\.\s+/.test(trimmed)) {
-      const dotIdx = trimmed.indexOf('.');
-      const itemText = trimmed.slice(dotIdx + 1).trim();
-      let result = '';
-      if (!inList || listType !== 'ol') {
-        if (inList) result += listType === 'ul' ? '</ul>' : '</ol>';
-        result += '<ol>';
-        inList = true;
-        listType = 'ol';
-      }
-      result += `<li>${itemText}</li>`;
-      return result;
-    }
-
-    // Empty lines
-    if (trimmed === '') {
-      if (inList) {
-        inList = false;
-        const close = listType === 'ol' ? '</ol>' : '</ul>';
-        listType = null;
-        return close;
-      }
-      return '<br>';
-    }
-
-    // Standard paragraph line
-    if (inList) {
-      inList = false;
-      const close = listType === 'ol' ? '</ol>' : '</ul>';
-      listType = null;
-      return close + `\n<p>${line}</p>`;
-    }
-
-    return `<p>${line}</p>`;
-  });
-
-  let parsedHtml = formattedLines.join('\n');
-  if (inList) {
-    parsedHtml += listType === 'ol' ? '\n</ol>' : '\n</ul>';
+  let parsedHtml = '';
+  try {
+    parsedHtml = marked.parse(tempText, { async: false }) as string;
+  } catch (err) {
+    console.error('Marked parsing error:', err);
+    parsedHtml = esc(tempText).replace(/\n/g, '<br>');
   }
-
-  // Restore and highlight code block placeholders
-  const codePlaceholderRegex = /__CODE_BLOCK_PLACEHOLDER_START__(\w+)__LANG_DELIM__([\s\S]*?)__CODE_BLOCK_PLACEHOLDER_END__/g;
-  parsedHtml = parsedHtml.replace(codePlaceholderRegex, (match, lang, code) => {
-    const rawCode = code
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'");
-    
-    const highlighted = highlightCode(rawCode, lang);
-    return `
-      <div class="code-block-chat">
-        <div class="code-block-chat-header">
-          <span>${lang || 'code'}</span>
-          <button class="btn-copy-chat-code"><i data-lucide="copy"></i><span>${esc(t('Копировать'))}</span></button>
-        </div>
-        <pre><code>${highlighted}</code></pre>
-      </div>
-    `;
-  });
 
   // Restore tool tag placeholders
   for (let i = 0; i < toolPlaceholders.length; i++) {
@@ -1254,12 +1204,34 @@ function parseMarkdown(text: string): string {
 }
 
 function highlightCode(code: string, lang: string): string {
+  const cleanLang = (lang || '').toLowerCase().trim();
   let escaped = esc(code);
-  const keywords = /\b(const|let|var|function|return|if|else|for|while|do|class|import|export|from|extends|new|this|typeof|instanceof|async|await|try|catch|finally|throw|default|switch|case|break|continue|null|undefined|true|false)\b/g;
-  const strings = /(&quot;.*?&quot;|&#39;.*?&#39;|`.*?`)/g;
+
+  if (cleanLang === 'html' || cleanLang === 'xml' || cleanLang === 'svg') {
+    escaped = escaped.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="comment">$1</span>');
+    escaped = escaped.replace(/(&lt;\/?)(\w+)([\s\S]*?)(&gt;)/g, (match, p1, tagName, attrs, p4) => {
+      const highlightedAttrs = attrs.replace(/(\b[a-zA-Z0-9_-]+=)(?:&quot;([\s\S]*?)&quot;|&#39;([\s\S]*?)&#39;)/g, (m, name, valDouble, valSingle) => {
+        const val = valDouble !== undefined ? `&quot;${valDouble}&quot;` : `&#39;${valSingle}&#39;`;
+        return `<span class="attr">${name}</span><span class="string">${val}</span>`;
+      });
+      return `${p1}<span class="tag">${tagName}</span>${highlightedAttrs}${p4}`;
+    });
+    return escaped;
+  }
+
+  if (cleanLang === 'css') {
+    escaped = escaped.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="comment">$1</span>');
+    escaped = escaped.replace(/(\b[a-zA-Z0-9_-]+\s*):([^;{}]+)(;|\b)/g, (match, prop, val, end) => {
+      return `<span class="keyword">${prop}</span>:<span class="string">${val}</span>${end}`;
+    });
+    return escaped;
+  }
+
+  const keywords = /\b(const|let|var|function|return|if|else|for|while|do|class|import|export|from|extends|new|this|typeof|instanceof|async|await|try|catch|finally|throw|default|switch|case|break|continue|null|undefined|true|false|fn|let|pub|struct|impl|match|use|mod|mut|crate|package|import|func|def|class|async|await|for|in|nil|type|interface)\b/g;
+  const strings = /(&quot;[\s\S]*?&quot;|&#39;[\s\S]*?&#39;|`[\s\S]*?`)/g;
   const numbers = /\b(\d+)\b/g;
-  const comments = /(\/\/.*|\/\*[\s\S]*?\*\/)/g;
-  const builtins = /\b(console|window|document|process|require|module|Array|Object|String|Number|Boolean|Function|Promise|Error|Map|Set|JSON|Math)\b/g;
+  const comments = /(\/\/.*|\/\*[\s\S]*?\*\/|#.*)/g;
+  const builtins = /\b(console|window|document|process|require|module|Array|Object|String|Number|Boolean|Function|Promise|Error|Map|Set|JSON|Math|Option|Result|Vec|String|self|Self|fmt|print|println|append|panic)\b/g;
 
   escaped = escaped.replace(comments, '<span class="comment">$1</span>');
   escaped = escaped.replace(strings, '<span class="string">$1</span>');
@@ -3735,8 +3707,6 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
 
   let fullContent = '';
   let fullReasoning = '';
-  // Accumulator for native tool_calls (OpenAI/Anthropic-style streaming).
-  // Streaming sends fragments — we merge them by index.
   const toolCallsAcc: { id: string; name: string; argsRaw: string }[] = [];
   let usage: any = {};
   let lastRenderTime = 0;
@@ -3747,7 +3717,6 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
     }
   };
 
-  // Debounced render — max 30fps for smooth streaming
   const debouncedRender = () => {
     if (pendingRender) return;
     const now = performance.now();
@@ -3762,7 +3731,6 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         textEl.innerHTML = html;
         scrollToBottom();
         if (!fullContent.trim()) {
-          // Show cursor blink during empty streaming
           textEl.innerHTML = '<span class="stream-cursor">|</span>';
         }
       });
@@ -3775,127 +3743,145 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
     scrollToBottom();
   };
 
-  const abortController = createAbortController();
-  try {
-    const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
-      method: 'POST',
-      headers: getLLMHeaders(apiKey),
-      signal: abortController.signal,
-      body: JSON.stringify(getLLMBody({
-        model,
-        messages: messages.map((m: any, i: number) => {
-          const cleanMsg: any = { role: m.role, content: m.content };
-          if (m.name) cleanMsg.name = m.name;
-          if (m.tool_calls) cleanMsg.tool_calls = m.tool_calls;
-          if (m.tool_call_id) cleanMsg.tool_call_id = m.tool_call_id;
-          
-          if (cleanMsg.role === 'system' && i === 0 && model.includes('anthropic')) {
-            cleanMsg.cache_control = { type: 'ephemeral' };
-          }
-          return cleanMsg;
-        }),
-        // Native function calling: OpenRouter forwards `tools` to compatible
-        // models. Models without tool support simply ignore this field and
-        // we fall back to parsing XML tags from the streamed text.
-        temperature: settings.temperature ?? 0.2,
-        stream: true,
-        max_tokens: settings.maxTokens || 4096,
-      })),
-    });
+  let isTruncated = true;
+  let continueAttempts = 0;
+  const maxContinueAttempts = 3;
+  let currentMessages = [...messages];
 
-    if (!resp.ok) {
-      bubble.remove();
-      const errorBody = await resp.text().catch(() => '');
-      let errorMsg = `HTTP ${resp.status}`;
-      try {
-        const parsed = JSON.parse(errorBody);
-        errorMsg = parsed.error?.message || errorMsg;
-      } catch {}
-      throw new Error(errorMsg);
+  while (isTruncated && continueAttempts < maxContinueAttempts) {
+    if (continueAttempts > 0) {
+      currentMessages = [
+        ...messages,
+        { role: 'assistant', content: fullContent },
+        { role: 'user', content: '[Предыдущий ответ был прерван на полуслове. Продолжи ровно с того места, где он остановился. Начни сразу с продолжения текста, без лишних вступлений или повторений!]' }
+      ];
+      setCurrentAction('⏳ Продолжение генерации...');
     }
 
-    const reader = resp.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    const abortController = createAbortController();
+    try {
+      const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
+        method: 'POST',
+        headers: getLLMHeaders(apiKey),
+        signal: abortController.signal,
+        body: JSON.stringify(getLLMBody({
+          model,
+          messages: currentMessages.map((m: any, i: number) => {
+            const cleanMsg: any = { role: m.role, content: m.content };
+            if (m.name) cleanMsg.name = m.name;
+            if (m.tool_calls) cleanMsg.tool_calls = m.tool_calls;
+            if (m.tool_call_id) cleanMsg.tool_call_id = m.tool_call_id;
+            
+            if (cleanMsg.role === 'system' && i === 0 && model.includes('anthropic')) {
+              cleanMsg.cache_control = { type: 'ephemeral' };
+            }
+            return cleanMsg;
+          }),
+          temperature: settings.temperature ?? 0.2,
+          stream: true,
+          max_tokens: settings.maxTokens || 4096,
+        })),
+      });
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const data = trimmed.slice(6);
-        if (data === '[DONE]') continue;
-
+      if (!resp.ok) {
+        if (continueAttempts === 0) bubble.remove();
+        const errorBody = await resp.text().catch(() => '');
+        let errorMsg = `HTTP ${resp.status}`;
         try {
-          const parsed = JSON.parse(data);
+          const parsed = JSON.parse(errorBody);
+          errorMsg = parsed.error?.message || errorMsg;
+        } catch {}
+        throw new Error(errorMsg);
+      }
 
-          if (parsed.usage) {
-            usage = parsed.usage;
-          }
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-          const delta = parsed.choices?.[0]?.delta;
-          if (!delta) continue;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-          if (delta.content) {
-            fullContent += delta.content;
-            debouncedRender();
-          }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-          // Native tool_calls streaming (deltas can come in pieces)
-          if (Array.isArray(delta.tool_calls)) {
-            for (const piece of delta.tool_calls) {
-              const idx = piece.index ?? toolCallsAcc.length;
-              if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: '', name: '', argsRaw: '' };
-              const acc = toolCallsAcc[idx];
-              if (piece.id) acc.id = piece.id;
-              if (piece.function?.name) acc.name = piece.function.name;
-              if (piece.function?.arguments) acc.argsRaw += piece.function.arguments;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+
+            if (parsed.usage) {
+              usage = parsed.usage;
             }
-          }
 
-          const reasoning = delta.reasoning_content || delta.reasoning || delta.thought;
-          if (reasoning) {
-            fullReasoning += reasoning;
-            let reasoningBlock = bubble.querySelector('.reasoning-block') as HTMLElement | null;
-            if (!reasoningBlock) {
-              reasoningBlock = document.createElement('div');
-              reasoningBlock.className = 'reasoning-block';
-              reasoningBlock.innerHTML = `
-                <div class="reasoning-header">
-                  <i data-lucide="brain"></i>
-                  <span>${esc(t('Размышления'))}</span>
-                </div>
-                <div class="reasoning-content"></div>
-              `;
-              bubble.querySelector('.stream-text')?.before(reasoningBlock);
-              refreshIcons();
+            const delta = parsed.choices?.[0]?.delta;
+            if (!delta) continue;
+
+            if (delta.content) {
+              fullContent += delta.content;
+              debouncedRender();
             }
-            const reasoningContent = reasoningBlock.querySelector('.reasoning-content');
-            if (reasoningContent) {
-              reasoningContent.textContent = (reasoningContent.textContent || '') + reasoning;
+
+            if (Array.isArray(delta.tool_calls)) {
+              for (const piece of delta.tool_calls) {
+                const idx = piece.index ?? toolCallsAcc.length;
+                if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: '', name: '', argsRaw: '' };
+                const acc = toolCallsAcc[idx];
+                if (piece.id) acc.id = piece.id;
+                if (piece.function?.name) acc.name = piece.function.name;
+                if (piece.function?.arguments) acc.argsRaw += piece.function.arguments;
+              }
             }
-            scrollToBottom();
+
+            const reasoning = delta.reasoning_content || delta.reasoning || delta.thought;
+            if (reasoning) {
+              fullReasoning += reasoning;
+              let reasoningBlock = bubble.querySelector('.reasoning-block') as HTMLElement | null;
+              if (!reasoningBlock) {
+                reasoningBlock = document.createElement('div');
+                reasoningBlock.className = 'reasoning-block';
+                reasoningBlock.innerHTML = `
+                  <div class="reasoning-header">
+                    <i data-lucide="brain"></i>
+                    <span>${esc(t('Размышления'))}</span>
+                  </div>
+                  <div class="reasoning-content"></div>
+                `;
+                bubble.querySelector('.stream-text')?.before(reasoningBlock);
+                refreshIcons();
+              }
+              const reasoningContent = reasoningBlock.querySelector('.reasoning-content');
+              if (reasoningContent) {
+                reasoningContent.textContent = (reasoningContent.textContent || '') + reasoning;
+              }
+              scrollToBottom();
+            }
+          } catch (e) {
+            console.error('[Stream error/warn] Unparseable SSE chunk:', e, data);
           }
-        } catch (e) {
-          // Skip unparseable chunks but log in console for debugging
-          console.error('[Stream error/warn] Unparseable SSE chunk:', e, data);
         }
       }
+    } catch (error: any) {
+      if (continueAttempts === 0) bubble.remove();
+      if (error.name === 'AbortError') {
+        throw new Error('Генерация прервана.');
+      }
+      throw error;
+    } finally {
+      activeAbortController = null;
     }
-  } catch (error: any) {
-    bubble.remove();
-    if (error.name === 'AbortError') {
-      throw new Error('Генерация прервана.');
+
+    isTruncated = isResponseTruncated(fullContent);
+    if (isTruncated) {
+      continueAttempts++;
+    } else {
+      break;
     }
-    throw error;
-  } finally {
-    activeAbortController = null;
   }
 
   if (bottomBar) bottomBar.classList.remove('hidden');
@@ -3930,7 +3916,6 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
     refreshIcons();
   }
 
-  // Convert accumulated native tool_calls into AgentTool[] for downstream execution
   const nativeTools: AgentTool[] = [];
   for (const tc of toolCallsAcc) {
     if (!tc || !tc.name) continue;
@@ -5837,6 +5822,12 @@ document.getElementById('btn-stop-generation')?.addEventListener('click', () => 
     activeAbortController.abort();
     activeAbortController = null;
   }
+  if (activeCommandExecId && window.electronAPI?.killCommand) {
+    window.electronAPI.killCommand(activeCommandExecId).catch(err => {
+      console.error('Failed to kill terminal command during generation stop:', err);
+    });
+    activeCommandExecId = null;
+  }
   setGeneratingState(false);
   isExecutingPlan = false;
   planApproved = false;
@@ -5929,6 +5920,49 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
 
   // Accordion Expand/Collapse Delegate Listener on Chat Messages
   chatMessages.addEventListener('click', (e) => {
+    // Clickable file paths inside chat
+    const fileLink = (e.target as HTMLElement).closest('.chat-file-link') as HTMLElement;
+    if (fileLink) {
+      e.preventDefault();
+      const relativePath = fileLink.dataset.path;
+      if (relativePath && activeProject?.workspacePath) {
+        (async () => {
+          try {
+            const content = await window.electronAPI.readFile(relativePath, activeProject!.workspacePath, settings.sandboxEnabled);
+            codeDisplay.textContent = content;
+            
+            $$('.ptab').forEach(x => x.classList.remove('active'));
+            $('#tab-code').classList.add('active');
+            iframeWrapper.style.display = 'none';
+            filesView.style.display = 'none';
+            codeView.style.display = 'flex';
+          } catch (err: any) {
+            console.warn(`Could not open file from chat link: ${relativePath}`, err);
+            const notice = document.createElement('div');
+            notice.className = 'chat-file-link-error';
+            notice.style.cssText = 'position:fixed; bottom:20px; right:20px; background:var(--accent-red); color:white; padding:8px 12px; border-radius:4px; font-size:12px; z-index:10000; box-shadow:var(--shadow-lg);';
+            notice.textContent = `${t('Не удалось открыть файл')}: ${relativePath}`;
+            document.body.appendChild(notice);
+            setTimeout(() => notice.remove(), 3000);
+          }
+        })();
+      }
+      return;
+    }
+
+    // Clickable external links inside chat
+    const extLink = (e.target as HTMLElement).closest('.chat-external-link') as HTMLAnchorElement;
+    if (extLink) {
+      e.preventDefault();
+      const url = extLink.getAttribute('href');
+      if (url && window.electronAPI?.openExternal) {
+        window.electronAPI.openExternal(url).catch(err => {
+          console.error('Failed to open external link:', err);
+        });
+      }
+      return;
+    }
+
     const header = (e.target as HTMLElement).closest('.tool-accordion-header');
     if (header) {
       const accordion = header.closest('.tool-accordion');
