@@ -4,6 +4,18 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.3.7] - 2026-06-11
+
+This chat quality release improves the agent loop for modern reasoning models and prevents raw tool XML from leaking into conversations.
+
+### Fixed
+*   **Tool Parsing:** The chat and execution loop now accept XML tool attributes wrapped in either single or double quotes, fixing cases like `<read_file path='index.html' full='true'/>` from reasoning models.
+*   **Chat Rendering:** Orphan closing tool tags are hidden instead of appearing as stray text, and tool cards render consistently for recovered tool calls.
+*   **Agent Prompting:** The built-in system prompt now explicitly asks models to use double-quoted tool attributes while keeping the runtime parser tolerant.
+
+### Changed
+*   **Website & Docs:** Updated v1.3.7 release messaging around the improved 2026-ready reasoning chat.
+
 ## [1.3.6] - 2026-06-11
 
 This QA release stabilizes packaging, tightens TypeScript coverage, and refreshes the chat, localization, website, and release metadata.

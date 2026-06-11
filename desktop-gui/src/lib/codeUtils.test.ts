@@ -83,6 +83,20 @@ describe('parseToolTags', () => {
     expect(tools.some(t => t.type === 'execute_command' && t.params.command === 'npm test')).toBe(true);
   });
 
+  it('parses single-quoted attributes from reasoning models', () => {
+    const tools = parseToolTags("<read_file path='index.html' full='true'/>");
+    expect(tools).toHaveLength(1);
+    expect(tools[0].type).toBe('read_file');
+    expect(tools[0].params.path).toBe('index.html');
+    expect(tools[0].params.full).toBe(true);
+  });
+
+  it('parses mixed quote styles and spaced attributes', () => {
+    const tools = parseToolTags("<execute_command command='npm test' /><search_code query=\"renderChat\" />");
+    expect(tools.some(t => t.type === 'execute_command' && t.params.command === 'npm test')).toBe(true);
+    expect(tools.some(t => t.type === 'search_code' && t.params.query === 'renderChat')).toBe(true);
+  });
+
   it('returns empty array when no tags present', () => {
     expect(parseToolTags('just some plain text')).toEqual([]);
   });

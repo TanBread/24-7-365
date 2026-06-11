@@ -232,6 +232,8 @@ const SYSTEM_PROMPT_COMMON = `Ты — экспертный ИИ-инженер,
 - ТЕБЕ КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать любые вежливые фразы, приветствия, извинения или пояснительный текст вокруг тегов инструментов (например, "Конечно, вот...", "Готово!", "Я обновил...").
 - Твой ответ должен состоять ИСКЛЮЧИТЕЛЬНО из тегов инструментов. Никакого разговорного текста. Каждое лишнее слово сжигает лимиты токенов.
 - Общайся с системой строго через XML-теги вызовов функций. Текст допускается только внутри тегов описания или в режиме планирования в тегах <step>.`;
+// Tool parsers accept both quote styles for resilience, but prompts ask models
+// for double quotes because it keeps streamed XML easier to read and recover.
 
 const SYSTEM_PROMPT_BUILD = `${SYSTEM_PROMPT_COMMON}
 
@@ -243,6 +245,7 @@ const SYSTEM_PROMPT_BUILD = `${SYSTEM_PROMPT_COMMON}
    - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО выводить готовый код обычным текстом в чат (в markdown блоках). Ты обязан ВСЕГДА использовать инструменты <write_file> или <edit_file> для генерации и изменения кода.
 
 ## ДОСТУПНЫЕ ИНСТРУМЕНТЫ
+- Формат атрибутов: используй двойные кавычки, например <read_file path="index.html" full="true"/>.
 - <read_dir path="путь"/> — получить список файлов.
 - <read_file path="путь" full="true"/> — прочитать содержимое файла. Параметр full="true" является необязательным и отключает AST-сжатие контекста. По умолчанию (без full="true") возвращается сжатый каркас (сигнатуры функций, экспорты и интерфейсы) для экономии токенов. Используй full="true" только по необходимости.
 - <write_file path="путь">содержимое</write_file> — записать новый файл.
@@ -266,6 +269,7 @@ const SYSTEM_PROMPT_PLAN = `${SYSTEM_PROMPT_COMMON}
 4. Запрашивай информацию о проекте через инструменты чтения, если тебе нужно изучить структуру перед планированием.
 
 ## ДОСТУПНЫЕ ИНСТРУМЕНТЫ
+- Формат атрибутов: используй двойные кавычки, например <read_file path="index.html" full="true"/>.
 - <read_dir path="путь"/> — получить список файлов.
 - <read_file path="путь" full="true"/> — прочитать содержимое файла (с поддержкой full="true" для получения полного кода функции вместо сжатого).
 - <list_components/> — получить список переиспользуемых компонентов проекта.
@@ -1041,6 +1045,16 @@ function extractToolResults(systemContent: string): string[] {
   return results;
 }
 
+function parseXmlAttrs(attrString: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const attrRegex = /([a-zA-Z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+  let attrMatch: RegExpExecArray | null;
+  while ((attrMatch = attrRegex.exec(attrString)) !== null) {
+    attrs[attrMatch[1]] = attrMatch[2] ?? attrMatch[3] ?? '';
+  }
+  return attrs;
+}
+
 function parseMarkdown(text: string): string {
   let tempText = text;
 
@@ -1071,15 +1085,16 @@ function parseMarkdown(text: string): string {
     return id;
   };
 
-  // Regexes matching the exact tool tags (allows unclosed tags during streaming)
-  const readDirRegex = /<read_dir\s+path="([^"]+)"\s*(?:\/>|>\s*<\/read_dir>)/g;
-  const readFileRegex = /<read_file\s+path="([^"]+)"\s*(?:\/>|>\s*<\/read_file>)/g;
-  const writeFileRegex = /<write_file\s+path="([^"]+)"\s*>([\s\S]*?)(?:<\/write_file>|$)/g;
-  const editFileRegex = /<edit_file\s+path="([^"]+)"\s*>([\s\S]*?)(?:<\/edit_file>|$)/g;
-  const execCmdRegex = /<execute_command\s+command="([^"]+)"\s*(?:\/>|>\s*<\/execute_command>)/g;
-  const searchCodeRegex = /<search_code\s+query="([^"]+)"\s*(?:\/>|>\s*<\/search_code>)/g;
+  // Regexes matching tool tags with either single- or double-quoted attributes.
+  const readDirRegex = /<read_dir\b[^>]*\s*(?:\/>|>\s*<\/read_dir>)/g;
+  const readFileRegex = /<read_file\b[^>]*\s*(?:\/>|>\s*<\/read_file>)/g;
+  const writeFileRegex = /<write_file\b[^>]*>[\s\S]*?(?:<\/write_file>|$)/g;
+  const editFileRegex = /<edit_file\b[^>]*>[\s\S]*?(?:<\/edit_file>|$)/g;
+  const execCmdRegex = /<execute_command\b[^>]*\s*(?:\/>|>\s*<\/execute_command>)/g;
+  const searchCodeRegex = /<search_code\b[^>]*\s*(?:\/>|>\s*<\/search_code>)/g;
   const listCompRegex = /<list_components\s*(?:\/>|>\s*<\/list_components>)/g;
-  const checkImgRegex = /<check_image_size\s+path="([^"]+)"\s*(?:\/>|>\s*<\/check_image_size>)/g;
+  const checkImgRegex = /<check_image_size\b[^>]*\s*(?:\/>|>\s*<\/check_image_size>)/g;
+  const orphanToolCloseRegex = /<\/(?:read_dir|read_file|write_file|edit_file|execute_command|search_code|list_components|check_image_size)>/g;
 
   // Replace tags with placeholders
   tempText = tempText.replace(editFileRegex, (match) => storePlaceholder(match));
@@ -1090,6 +1105,7 @@ function parseMarkdown(text: string): string {
   tempText = tempText.replace(searchCodeRegex, (match) => storePlaceholder(match));
   tempText = tempText.replace(listCompRegex, (match) => storePlaceholder(match));
   tempText = tempText.replace(checkImgRegex, (match) => storePlaceholder(match));
+  tempText = tempText.replace(orphanToolCloseRegex, '');
 
   // Escape HTML contents for safety
   let safeText = esc(tempText);
@@ -1329,28 +1345,34 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
     `;
   };
 
-  // Replace each raw XML tag in order
-  html = html.replace(/<read_dir\s+path="([^"]+)"\s*(?:\/>|>\s*<\/read_dir>)/g, (match, path) => {
+  // Replace each raw XML tag in order. Attribute parsing accepts both quote styles.
+  html = html.replace(/<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>)/g, (match, attrsRaw) => {
+    const path = parseXmlAttrs(attrsRaw).path || '.';
     return replaceTag(match, 'read_dir', `Просмотр папки: ${path}`, '');
   });
 
-  html = html.replace(/<read_file\s+path="([^"]+)"\s*(?:\/>|>\s*<\/read_file>)/g, (match, path) => {
+  html = html.replace(/<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>)/g, (match, attrsRaw) => {
+    const path = parseXmlAttrs(attrsRaw).path || '';
     return replaceTag(match, 'read_file', `Чтение файла: ${path}`, '');
   });
 
-  html = html.replace(/<execute_command\s+command="([^"]+)"\s*(?:\/>|>\s*<\/execute_command>)/g, (match, command) => {
+  html = html.replace(/<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>)/g, (match, attrsRaw) => {
+    const command = parseXmlAttrs(attrsRaw).command || '';
     return replaceTag(match, 'execute_command', `Запуск команды: ${command}`, '');
   });
 
-  html = html.replace(/<write_file\s+path="([^"]+)"\s*>([\s\S]*?)(?:<\/write_file>|$)/g, (match, path, content) => {
+  html = html.replace(/<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|$)/g, (match, attrsRaw, content) => {
+    const path = parseXmlAttrs(attrsRaw).path || '';
     return replaceTag(match, 'write_file', `Создание файла: ${path}`, content);
   });
 
-  html = html.replace(/<edit_file\s+path="([^"]+)"\s*>([\s\S]*?)(?:<\/edit_file>|$)/g, (match, path, inner) => {
+  html = html.replace(/<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|$)/g, (match, attrsRaw, inner) => {
+    const path = parseXmlAttrs(attrsRaw).path || '';
     return replaceTag(match, 'edit_file', `Правка файла: ${path}`, inner);
   });
 
-  html = html.replace(/<search_code\s+query="([^"]+)"\s*(?:\/>|>\s*<\/search_code>)/g, (match, query) => {
+  html = html.replace(/<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>)/g, (match, attrsRaw) => {
+    const query = parseXmlAttrs(attrsRaw).query || '';
     return replaceTag(match, 'search_code', `Поиск в коде: ${query}`, '');
   });
 
@@ -1358,9 +1380,12 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
     return replaceTag(match, 'list_components', `Список компонентов проекта`, '');
   });
 
-  html = html.replace(/<check_image_size\s+path="([^"]+)"\s*(?:\/>|>\s*<\/check_image_size>)/g, (match, path) => {
+  html = html.replace(/<check_image_size\b([^>]*)\s*(?:\/>|>\s*<\/check_image_size>)/g, (match, attrsRaw) => {
+    const path = parseXmlAttrs(attrsRaw).path || '';
     return replaceTag(match, 'check_image_size', `Проверка изображения: ${path}`, '');
   });
+
+  html = html.replace(/<\/(?:read_dir|read_file|write_file|edit_file|execute_command|search_code|list_components|check_image_size)>/g, '');
 
   // Replace each generic MCP tool tag in order
   html = html.replace(/<(mcp__[a-zA-Z0-9_-]+__[a-zA-Z0-9_-]+)\s+([^>]*?)(?:\/>|>\s*<\/\1>)/g, (match, fullTagName, attrString) => {
@@ -2926,23 +2951,22 @@ function parseTools(text: string): AgentTool[] {
   let match;
 
   // 1. Read dir
-  const rawReadDir = /<read_dir\s+path="([^"]+)"\s*(?:\/>|>\s*<\/read_dir>)/g;
+  const rawReadDir = /<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>)/g;
   while ((match = rawReadDir.exec(text)) !== null) {
-    tools.push({ type: 'read_dir', params: { path: match[1] }, rawTag: match[0] });
+    const attrs = parseXmlAttrs(match[1]);
+    if (attrs.path) tools.push({ type: 'read_dir', params: { path: attrs.path }, rawTag: match[0] });
   }
 
   // 2. Read file
-  const rawReadFile = /<read_file\s+([^>]+?)\s*(?:\/>|>\s*<\/read_file>)/g;
+  const rawReadFile = /<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>)/g;
   while ((match = rawReadFile.exec(text)) !== null) {
-    const attrStr = match[1];
-    const pathMatch = attrStr.match(/path="([^"]+)"/);
-    const fullMatch = attrStr.match(/full="([^"]+)"/);
-    if (pathMatch) {
+    const attrs = parseXmlAttrs(match[1]);
+    if (attrs.path) {
       tools.push({
         type: 'read_file',
         params: {
-          path: pathMatch[1],
-          full: fullMatch ? fullMatch[1] === 'true' : false
+          path: attrs.path,
+          full: attrs.full === 'true'
         },
         rawTag: match[0]
       });
@@ -2950,31 +2974,33 @@ function parseTools(text: string): AgentTool[] {
   }
 
   // 3. Write file
-  const rawWriteFile = /<write_file\s+path="([^"]+)"\s*>([\s\S]*?)(?:<\/write_file>|$)/g;
+  const rawWriteFile = /<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|$)/g;
   while ((match = rawWriteFile.exec(text)) !== null) {
-    tools.push({ type: 'write_file', params: { path: match[1], content: match[2] }, rawTag: match[0] });
+    const attrs = parseXmlAttrs(match[1]);
+    if (attrs.path) tools.push({ type: 'write_file', params: { path: attrs.path, content: match[2] }, rawTag: match[0] });
   }
 
   // 4. Edit file
-  const rawEditFile = /<edit_file\s+path="([^"]+)"\s*>([\s\S]*?)(?:<\/edit_file>|$)/g;
+  const rawEditFile = /<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|$)/g;
   while ((match = rawEditFile.exec(text)) !== null) {
-    const filePath = match[1];
+    const attrs = parseXmlAttrs(match[1]);
     const innerContent = match[2];
     const searchMatch = innerContent.match(/<search>([\s\S]*?)(?:<\/search>|$)/);
     const replaceMatch = innerContent.match(/<replace>([\s\S]*?)(?:<\/replace>|$)/);
-    if (searchMatch && replaceMatch) {
+    if (attrs.path && searchMatch && replaceMatch) {
       tools.push({
         type: 'edit_file',
-        params: { path: filePath, search: searchMatch[1], replace: replaceMatch[1] },
+        params: { path: attrs.path, search: searchMatch[1], replace: replaceMatch[1] },
         rawTag: match[0]
       });
     }
   }
 
   // 5. Execute command
-  const rawExecCmd = /<execute_command\s+command="([^"]+)"\s*(?:\/>|>\s*<\/execute_command>)/g;
+  const rawExecCmd = /<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>)/g;
   while ((match = rawExecCmd.exec(text)) !== null) {
-    tools.push({ type: 'execute_command', params: { command: match[1] }, rawTag: match[0] });
+    const attrs = parseXmlAttrs(match[1]);
+    if (attrs.command) tools.push({ type: 'execute_command', params: { command: attrs.command }, rawTag: match[0] });
   }
 
   // 6. List components
@@ -2984,15 +3010,17 @@ function parseTools(text: string): AgentTool[] {
   }
 
   // 7. Check image size
-  const rawCheckImgSize = /<check_image_size\s+path="([^"]+)"\s*(?:\/>|>\s*<\/check_image_size>)/g;
+  const rawCheckImgSize = /<check_image_size\b([^>]*)\s*(?:\/>|>\s*<\/check_image_size>)/g;
   while ((match = rawCheckImgSize.exec(text)) !== null) {
-    tools.push({ type: 'check_image_size', params: { path: match[1] }, rawTag: match[0] });
+    const attrs = parseXmlAttrs(match[1]);
+    if (attrs.path) tools.push({ type: 'check_image_size', params: { path: attrs.path }, rawTag: match[0] });
   }
 
   // 8. Search code (lightweight codebase search)
-  const rawSearchCode = /<search_code\s+query="([^"]+)"\s*(?:\/>|>\s*<\/search_code>)/g;
+  const rawSearchCode = /<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>)/g;
   while ((match = rawSearchCode.exec(text)) !== null) {
-    tools.push({ type: 'search_code', params: { query: match[1] }, rawTag: match[0] });
+    const attrs = parseXmlAttrs(match[1]);
+    if (attrs.query) tools.push({ type: 'search_code', params: { query: attrs.query }, rawTag: match[0] });
   }
 
   // 9. Generic MCP tools parsing
@@ -3001,13 +3029,9 @@ function parseTools(text: string): AgentTool[] {
     const fullTagName = match[1];
     const attrString = match[2];
     
-    // Parse attributes key="value"
+    // Parse attributes key="value" or key='value'
     const params: Record<string, string> = {};
-    const attrRegex = /([a-zA-Z0-9_-]+)="([^"]*)"/g;
-    let attrMatch;
-    while ((attrMatch = attrRegex.exec(attrString)) !== null) {
-      params[attrMatch[1]] = attrMatch[2];
-    }
+    Object.assign(params, parseXmlAttrs(attrString));
     
     tools.push({ type: fullTagName, params, rawTag: match[0] });
   }

@@ -42,8 +42,8 @@ Enable Git Auto-Commits in Settings to automatically stage files and create Git 
 ### 💬 **Interactive Terminal (Stdin)**
 No more hangs on interactive prompts. Live stream terminal outputs and write directly to standard input (like `[y/n]` prompts, package configurations, or password requests) from the terminal input bar. You can stop/kill active processes at any time and navigate stdin input history using the Up/Down arrow keys.
 
-### 🧠 **Reasoning-Aware Chat**
-Use reasoning models without flooding the workspace. The chat renders collapsible reasoning blocks, readable tool call cards, copy actions, search, and Markdown export while preserving the conversation history locally.
+### 🧠 **2026-Ready Reasoning Chat**
+Use reasoning models without flooding the workspace. The chat renders collapsible reasoning blocks, readable tool call cards, copy actions, search, and Markdown export while preserving the conversation history locally. Tool parsing is tolerant of model quote-style variations, so read/write/command actions keep running instead of leaking raw XML into the chat.
 
 ### 🧩 **Monaco Diff Reviews**
 Review proposed edits in a fullscreen Monaco-powered diff viewer before they touch disk, with accurate line alignment and syntax highlighting for large files.

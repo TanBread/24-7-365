@@ -110,48 +110,61 @@ export interface ParsedTool {
   rawTag: string;
 }
 
+function parseToolAttrs(attrString: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const attrRegex = /([a-zA-Z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+  let attrMatch: RegExpExecArray | null;
+  while ((attrMatch = attrRegex.exec(attrString)) !== null) {
+    attrs[attrMatch[1]] = attrMatch[2] ?? attrMatch[3] ?? '';
+  }
+  return attrs;
+}
+
 export function parseToolTags(text: string): ParsedTool[] {
   const tools: ParsedTool[] = [];
   let match: RegExpExecArray | null;
 
-  const rawReadDir = /<read_dir\s+path="([^"]+)"\s*(?:\/>|>\s*<\/read_dir>)/g;
+  const rawReadDir = /<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>)/g;
   while ((match = rawReadDir.exec(text)) !== null) {
-    tools.push({ type: 'read_dir', params: { path: match[1] }, rawTag: match[0] });
+    const attrs = parseToolAttrs(match[1]);
+    if (attrs.path) tools.push({ type: 'read_dir', params: { path: attrs.path }, rawTag: match[0] });
   }
 
-  const rawReadFile = /<read_file\s+([^>]+?)\s*(?:\/>|>\s*<\/read_file>)/g;
+  const rawReadFile = /<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>)/g;
   while ((match = rawReadFile.exec(text)) !== null) {
-    const attrStr = match[1];
-    const pathMatch = attrStr.match(/path="([^"]+)"/);
-    const fullMatch = attrStr.match(/full="([^"]+)"/);
-    if (pathMatch) {
-      tools.push({ type: 'read_file', params: { path: pathMatch[1], full: fullMatch ? fullMatch[1] === 'true' : false }, rawTag: match[0] });
+    const attrs = parseToolAttrs(match[1]);
+    if (attrs.path) {
+      tools.push({ type: 'read_file', params: { path: attrs.path, full: attrs.full === 'true' }, rawTag: match[0] });
     }
   }
 
-  const rawWriteFile = /<write_file\s+path="([^"]+)"\s*>([\s\S]*?)(?:<\/write_file>|$)/g;
+  const rawWriteFile = /<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|$)/g;
   while ((match = rawWriteFile.exec(text)) !== null) {
-    tools.push({ type: 'write_file', params: { path: match[1], content: match[2] }, rawTag: match[0] });
+    const attrs = parseToolAttrs(match[1]);
+    if (attrs.path) tools.push({ type: 'write_file', params: { path: attrs.path, content: match[2] }, rawTag: match[0] });
   }
 
-  const rawEditFile = /<edit_file\s+path="([^"]+)"\s*>([\s\S]*?)(?:<\/edit_file>|$)/g;
+  const rawEditFile = /<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|$)/g;
   while ((match = rawEditFile.exec(text)) !== null) {
+    const attrs = parseToolAttrs(match[1]);
     const innerContent = match[2];
     const searchMatch = innerContent.match(/<search>([\s\S]*?)(?:<\/search>|$)/);
     const replaceMatch = innerContent.match(/<replace>([\s\S]*?)(?:<\/replace>|$)/);
-    if (searchMatch && replaceMatch) {
-      tools.push({ type: 'edit_file', params: { path: match[1], search: searchMatch[1], replace: replaceMatch[1] }, rawTag: match[0] });
+    if (attrs.path && searchMatch && replaceMatch) {
+      tools.push({ type: 'edit_file', params: { path: attrs.path, search: searchMatch[1], replace: replaceMatch[1] }, rawTag: match[0] });
     }
   }
 
-  const rawExecCmd = /<execute_command\s+command="([^"]+)"\s*(?:\/>|>\s*<\/execute_command>)/g;
+  const rawExecCmd = /<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>)/g;
   while ((match = rawExecCmd.exec(text)) !== null) {
-    tools.push({ type: 'execute_command', params: { command: match[1] }, rawTag: match[0] });
+    const attrs = parseToolAttrs(match[1]);
+    if (attrs.command) tools.push({ type: 'execute_command', params: { command: attrs.command }, rawTag: match[0] });
   }
 
-  const rawSearchCode = /<search_code\s+query="([^"]+)"\s*(?:\/>|>\s*<\/search_code>)/g;
+  const rawSearchCode = /<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>)/g;
   while ((match = rawSearchCode.exec(text)) !== null) {
-    tools.push({ type: 'search_code', params: { query: match[1] }, rawTag: match[0] });
+    const attrs = parseToolAttrs(match[1]);
+    if (attrs.query) tools.push({ type: 'search_code', params: { query: attrs.query }, rawTag: match[0] });
   }
 
   return tools;
