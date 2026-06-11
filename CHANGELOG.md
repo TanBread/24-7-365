@@ -4,6 +4,19 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.3.8] - 2026-06-11
+
+This major UI/UX release redesigns the chat interface to a premium, modern look and fixes specific message token metrics.
+
+### Added
+*   **Premium Chat UI:** Completely redesigned chat bubbles for both AI and user messages. AI messages now have structured card layouts, while user messages have premium purple-blue gradients.
+*   **Specific Token Usage:** Each AI response now displays its own token count (e.g. `🧮 1,234 + 512`) and estimated cost, replacing the redundant project-wide totals.
+*   **Clean Empty States:** Handled messages with no text content (only tools or reasoning) elegantly without creating blank bubbles.
+
+### Fixed
+*   **Reasoning Blocks:** Refined the style and collapse transitions of reasoning blocks (DeepSeek R1/thought processes) to fit perfectly within message cards.
+*   **Tool Accordions:** Cleaned up padding, borders, and status icons for MCP and local tool cards.
+
 ## [1.3.7] - 2026-06-11
 
 This chat quality release improves the agent loop for modern reasoning models and prevents raw tool XML from leaking into conversations.

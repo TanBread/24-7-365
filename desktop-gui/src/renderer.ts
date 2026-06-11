@@ -75,7 +75,7 @@ interface ProjectSnapshot {
   planSteps: PlanStep[];
   files: Record<string, string>;
 }
-interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string; reasoningContent?: string; }
+interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string; reasoningContent?: string; usage?: { prompt: number; completion: number }; }
 interface MCPServerConfig {
   id: string;
   name: string;
@@ -1580,12 +1580,12 @@ function confirmDialog(message: string, title = 'Подтверждение'): P
   });
 }
 
-function appendBubble(sender: string, text: string, isAi: boolean, msgIndex?: number) {
-  const time = new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-  const div = document.createElement('div');
-  div.className = `chat-message ${isAi ? 'ai' : 'user'}`;
-  if (msgIndex !== undefined) div.dataset.msgIndex = String(msgIndex);
-  
+function buildMessageHtml(
+  sender: string,
+  text: string,
+  isAi: boolean,
+  extra?: { reasoningContent?: string; usage?: { prompt: number; completion: number }; toolResults?: string[] }
+): string {
   let displayContent = text;
   if (!isAi && displayContent.includes('=== ПРИКРЕПЛЕННЫЙ КОНТЕКСТ ФАЙЛОВ ===')) {
     const parts = displayContent.split('Пользовательский запрос: ');
@@ -1596,18 +1596,79 @@ function appendBubble(sender: string, text: string, isAi: boolean, msgIndex?: nu
 
   let formattedText = isAi ? parseMarkdown(displayContent) : esc(displayContent).replace(/\n/g, '<br>');
   if (isAi) {
-    formattedText = formatToolTags(formattedText);
+    formattedText = formatToolTags(formattedText, true, extra?.toolResults);
+  }
+
+  let reasoningHtml = '';
+  if (isAi && extra?.reasoningContent) {
+    const escapedReasoning = esc(extra.reasoningContent).trim();
+    if (escapedReasoning) {
+      reasoningHtml = `
+        <div class="reasoning-block collapsed">
+          <div class="reasoning-header">
+            <i data-lucide="brain"></i>
+            <span>${esc(t('Размышления'))}</span>
+          </div>
+          <div class="reasoning-content">${escapedReasoning}</div>
+        </div>
+      `;
+    }
   }
 
   const actionsBar = isAi
-    ? `<div class="msg-actions"><button class="msg-action-btn copy" data-action="copy" title="${esc(t('Копировать'))}" aria-label="${esc(t('Копировать'))}"><i data-lucide="copy"></i></button></div>`
+    ? buildMsgActions(true)
     : buildMsgActions(false);
 
-  const modelLabel = isAi && settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
-  const tokenInfo = isAi && activeProject ? `${(activeProject.totalTokensPrompt || 0) + (activeProject.totalTokensCompletion || 0)} ${t('токенов')}` : '';
-  const footerHtml = (modelLabel || tokenInfo) ? `<div class="msg-footer">${modelLabel ? `<span class="msg-footer-model">${modelLabel}</span>` : ''}${tokenInfo ? `<span class="msg-footer-tokens">${tokenInfo}</span>` : ''}</div>` : '';
+  const modelLabel = isAi && sender !== 'Система' && sender !== 'System' && settings.model
+    ? esc(settings.model.split('/').pop() || settings.model)
+    : '';
 
-  div.innerHTML = `<div class="message-text">${formattedText}</div><div class="msg-bottom">${actionsBar}${footerHtml}</div>`;
+  let tokenUsageHtml = '';
+  if (isAi && extra?.usage) {
+    const u = extra.usage;
+    const p = u.prompt || 0;
+    const c = u.completion || 0;
+    const cost = estimateCost(p, c);
+    const costStr = cost > 0 ? ` · ~$${cost.toFixed(4)}` : '';
+    const titleText = `Prompt: ${p.toLocaleString()}, Completion: ${c.toLocaleString()}`;
+    tokenUsageHtml = `<span class="msg-footer-tokens" title="${esc(titleText)}">🧮 ${p.toLocaleString()}+${c.toLocaleString()}${costStr}</span>`;
+  }
+
+  const footerHtml = (modelLabel || tokenUsageHtml)
+    ? `<div class="msg-footer">${modelLabel ? `<span class="msg-footer-model">${modelLabel}</span>` : ''}${tokenUsageHtml}</div>`
+    : '';
+
+  const headerHtml = `
+    <div class="msg-header">
+      <span class="msg-sender-name">${esc(sender)}</span>
+    </div>
+  `;
+
+  return `
+    ${headerHtml}
+    <div class="message-bubble">
+      ${reasoningHtml}
+      <div class="message-text">${formattedText}</div>
+    </div>
+    <div class="msg-bottom">
+      <div class="msg-actions">${actionsBar}</div>
+      ${footerHtml}
+    </div>
+  `;
+}
+
+function appendBubble(
+  sender: string,
+  text: string,
+  isAi: boolean,
+  msgIndex?: number,
+  extra?: { reasoningContent?: string; usage?: { prompt: number; completion: number } }
+) {
+  const div = document.createElement('div');
+  div.className = `chat-message ${isAi ? 'ai' : 'user'}`;
+  if (msgIndex !== undefined) div.dataset.msgIndex = String(msgIndex);
+
+  div.innerHTML = buildMessageHtml(sender, text, isAi, extra);
   chatMessages.appendChild(div);
   if (autoScrollEnabled) chatMessages.scrollTop = chatMessages.scrollHeight;
   refreshIcons();
@@ -1624,7 +1685,7 @@ function renderChatHistory() {
     
     const isAi = msg.role === 'assistant';
     if (!isAi) {
-      appendBubble('Вы', msg.content, false);
+      appendBubble('Вы', msg.content, false, i);
     } else {
       let toolResults: string[] = [];
       const nextMsg = activeProject.chatHistory[i + 1];
@@ -1634,31 +1695,18 @@ function renderChatHistory() {
       
       const div = document.createElement('div');
       div.className = 'chat-message ai';
+      div.dataset.msgIndex = String(i);
       
-      let formattedText = '';
-      if ((msg as any).reasoningContent) {
-        const escapedReasoning = esc((msg as any).reasoningContent).trim();
-        if (escapedReasoning) {
-          formattedText += `
-            <div class="reasoning-block">
-              <div class="reasoning-header">
-                <i data-lucide="brain"></i>
-                <span>${esc(t('Размышления'))}</span>
-              </div>
-              <div class="reasoning-content">${escapedReasoning}</div>
-            </div>
-          `;
+      div.innerHTML = buildMessageHtml(
+        '7/24 IDE',
+        msg.content,
+        true,
+        {
+          reasoningContent: msg.reasoningContent,
+          usage: msg.usage,
+          toolResults
         }
-      }
-      
-      formattedText += parseMarkdown(msg.content);
-      formattedText = formatToolTags(formattedText, true, toolResults);
-      
-      const actionsHtml = buildMsgActions(true);
-      const modelLabel = settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
-      const tokenInfo = activeProject ? `${(activeProject.totalTokensPrompt || 0) + (activeProject.totalTokensCompletion || 0)} ${t('токенов')}` : '';
-      const footerHtml = (modelLabel || tokenInfo) ? `<div class="msg-footer">${modelLabel ? `<span class="msg-footer-model">${modelLabel}</span>` : ''}${tokenInfo ? `<span class="msg-footer-tokens">${tokenInfo}</span>` : ''}</div>` : '';
-      div.innerHTML = `<div class="message-text">${formattedText}</div><div class="msg-bottom">${actionsHtml}${footerHtml}</div>`;
+      );
       chatMessages.appendChild(div);
     }
   }
@@ -3489,7 +3537,8 @@ async function runAgentStep() {
     activeProject!.chatHistory.push({
       role: 'assistant',
       content: result.content,
-      reasoningContent: result.reasoningContent
+      reasoningContent: result.reasoningContent,
+      usage: result.usage ? { prompt: result.usage.prompt_tokens, completion: result.usage.completion_tokens } : undefined
     });
     saveProjects();
 
@@ -3659,12 +3708,19 @@ async function streamChatCompletionWithFallback(messages: any[]) {
 async function streamChatCompletion(messages: any[], model: string, apiKey: string) {
   setCurrentAction('🧠 Генерация ответа...');
   removeThinking();
+  const modelLabel = settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
   const bubble = document.createElement('div');
   bubble.className = 'chat-message ai streaming';
   bubble.innerHTML = `
-    <div class="message-text stream-text"><span class="stream-cursor">|</span></div>
+    <div class="msg-header">
+      <span class="msg-sender-name">7/24 IDE</span>
+    </div>
+    <div class="message-bubble">
+      <div class="message-text stream-text"><span class="stream-cursor">|</span></div>
+    </div>
     <div class="msg-bottom hidden">
-      ${buildMsgActions(true)}
+      <div class="msg-actions">${buildMsgActions(true)}</div>
+      <div class="msg-footer">${modelLabel ? `<span class="msg-footer-model">${modelLabel}</span>` : ''}</div>
     </div>
   `;
   const textEl = bubble.querySelector('.stream-text')!;
@@ -3841,15 +3897,17 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
   bubble.classList.remove('streaming');
 
   if (usage.prompt_tokens || usage.completion_tokens) {
-    const tokenInfo = document.createElement('div');
-    tokenInfo.className = 'token-usage';
-    const p = usage.prompt_tokens || 0;
-    const c = usage.completion_tokens || 0;
-    const cost = estimateCost(p, c);
-    const costStr = cost > 0 ? ` · ~$${cost.toFixed(4)}` : '';
-    tokenInfo.textContent = `🧮 ${p.toLocaleString()}+${c.toLocaleString()}${costStr}`;
-    tokenInfo.title = `Prompt: ${p.toLocaleString()}, Completion: ${c.toLocaleString()}\n${t('Всего за сессию')}: ${tokenAccumulated.prompt.toLocaleString()} prompt + ${tokenAccumulated.completion.toLocaleString()} completion`;
-    bubble.querySelector('.message-text')!.after(tokenInfo);
+    const footerEl = bubble.querySelector('.msg-bottom .msg-footer') as HTMLElement;
+    if (footerEl) {
+      const p = usage.prompt_tokens || 0;
+      const c = usage.completion_tokens || 0;
+      const cost = estimateCost(p, c);
+      const costStr = cost > 0 ? ` · ~$${cost.toFixed(4)}` : '';
+      const titleText = `Prompt: ${p.toLocaleString()}, Completion: ${c.toLocaleString()}\n${t('Всего за сессию')}: ${tokenAccumulated.prompt.toLocaleString()} prompt + ${tokenAccumulated.completion.toLocaleString()} completion`;
+      const modelLabel = settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
+      const usageSpan = `<span class="msg-footer-tokens" title="${esc(titleText)}">🧮 ${p.toLocaleString()}+${c.toLocaleString()}${costStr}</span>`;
+      footerEl.innerHTML = `${modelLabel ? `<span class="msg-footer-model">${modelLabel}</span>` : ''}${usageSpan}`;
+    }
   }
 
   let formattedText = parseMarkdown(fullContent);
