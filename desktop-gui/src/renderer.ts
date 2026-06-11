@@ -1087,11 +1087,19 @@ markedRenderer.code = (code, language) => {
     pathAttr = `data-path="${esc(lang)}"`;
   }
   
+  // Check if code block is executable (JS, TS, Python, Shell, etc.)
+  const execLangs = ['js', 'javascript', 'ts', 'typescript', 'py', 'python', 'sh', 'bash', 'zsh', 'cmd', 'bat', 'powershell', 'ps1'];
+  const isExecutable = execLangs.includes(lang.toLowerCase());
+  const runBtn = isExecutable ? `<button class="btn-run-chat-code" title="${esc(t('Выполнить'))}"><i data-lucide="play"></i><span>${esc(t('Выполнить'))}</span></button>` : '';
+  
   return `
-    <div class="code-block-chat" ${pathAttr}>
+    <div class="code-block-chat" ${pathAttr} data-lang="${esc(lang)}">
       <div class="code-block-chat-header">
         <span>${headerText}</span>
-        <button class="btn-copy-chat-code"><i data-lucide="copy"></i><span>${esc(t('Копировать'))}</span></button>
+        <div class="code-block-chat-actions">
+          ${runBtn}
+          <button class="btn-copy-chat-code"><i data-lucide="copy"></i><span>${esc(t('Копировать'))}</span></button>
+        </div>
       </div>
       <pre><code>${highlighted}</code></pre>
     </div>
@@ -1303,16 +1311,26 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
                      type === 'check_image_size' ? 'image' :
                      'terminal';
 
+    const toolActions = isHistory ? `
+      <div class="tool-accordion-actions">
+        <button class="tool-action-btn copy" data-tool-idx="${idx}" data-tool-type="${type}" title="${esc(t('Копировать результат'))}" aria-label="${esc(t('Копировать'))}"><i data-lucide="copy"></i></button>
+        <button class="tool-action-btn rerun" data-tool-idx="${idx}" data-tool-type="${type}" title="${esc(t('Повторить выполнение'))}" aria-label="${esc(t('Повторить'))}"><i data-lucide="refresh-cw"></i></button>
+      </div>
+    ` : '';
+
     return `
-      <div class="tool-accordion tool-step-${idx}" data-tool-type="${type}">
+      <div class="tool-accordion tool-step-${idx}" data-tool-type="${type}" data-tool-idx="${idx}">
         <div class="tool-accordion-header">
           <div class="tool-accordion-title-wrap">
             <i data-lucide="${iconName}"></i>
             <span class="tool-accordion-title">${esc(title)}</span>
             ${diffStats}
           </div>
-          <div class="tool-accordion-status ${statusClassVal}">
-            <i data-lucide="${statusIcon}"></i> <span>${statusText}</span>
+          <div class="tool-accordion-status-wrap">
+            <div class="tool-accordion-status ${statusClassVal}">
+              <i data-lucide="${statusIcon}"></i> <span>${statusText}</span>
+            </div>
+            ${toolActions}
           </div>
         </div>
         <div class="tool-accordion-body">
@@ -1377,10 +1395,11 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
 
 function buildMsgActions(isAi: boolean): string {
   const copyBtn = `<button class="msg-action-btn copy" data-action="copy" title="${esc(t('Копировать'))}" aria-label="${esc(t('Копировать'))}"><i data-lucide="copy"></i></button>`;
+  const branchBtn = `<button class="msg-action-btn branch" data-action="branch" title="${esc(t('Ветвиться от сюда'))}" aria-label="${esc(t('Ветвиться'))}"><i data-lucide="git-branch"></i></button>`;
   if (isAi) {
-    return `<div class="msg-actions">${copyBtn}<button class="msg-action-btn regenerate" data-action="regenerate" title="${esc(t('Сгенерировать заново'))}" aria-label="${esc(t('Сгенерировать заново'))}"><i data-lucide="refresh-cw"></i></button></div>`;
+    return `<div class="msg-actions">${copyBtn}${branchBtn}<button class="msg-action-btn regenerate" data-action="regenerate" title="${esc(t('Сгенерировать заново'))}" aria-label="${esc(t('Сгенерировать заново'))}"><i data-lucide="refresh-cw"></i></button></div>`;
   }
-  return `<div class="msg-actions">${copyBtn}<button class="msg-action-btn edit" data-action="edit" title="${esc(t('Редактировать сообщение'))}" aria-label="${esc(t('Редактировать'))}"><i data-lucide="pencil"></i></button></div>`;
+  return `<div class="msg-actions">${copyBtn}${branchBtn}<button class="msg-action-btn edit" data-action="edit" title="${esc(t('Редактировать сообщение'))}" aria-label="${esc(t('Редактировать'))}"><i data-lucide="pencil"></i></button></div>`;
 }
 
 // In-app confirmation modal (replaces the native system dialog)
@@ -1632,6 +1651,43 @@ function buildMessageHtml(
       ${footerHtml}
     </div>
   `;
+}
+
+async function runCodeSnippet(code: string, lang: string) {
+  if (!activeProject?.workspacePath) return;
+  const langMap: Record<string, string> = {
+    'js': 'node', 'javascript': 'node',
+    'ts': 'npx tsx', 'typescript': 'npx tsx',
+    'py': 'python', 'python': 'python',
+    'sh': 'bash', 'bash': 'bash', 'zsh': 'bash',
+    'cmd': 'cmd /c', 'bat': 'cmd /c',
+    'powershell': 'pwsh', 'ps1': 'pwsh',
+  };
+  const executor = langMap[lang.toLowerCase()];
+  if (!executor) {
+    appendBubble('7/24 IDE', t('⚠️ Этот язык не поддерживает быстрое выполнение.'), true);
+    return;
+  }
+  const extMap: Record<string, string> = {
+    'node': '.js', 'npx tsx': '.ts', 'python': '.py',
+    'bash': '.sh', 'cmd /c': '.bat', 'pwsh': '.ps1',
+  };
+  const ext = extMap[executor] || '.txt';
+  const tmpFile = `.7-24-run/tmp-${Date.now()}${ext}`;
+  try {
+    await window.electronAPI.writeFile(tmpFile, code, activeProject.workspacePath, true);
+    appendBubble('7/24 IDE', t('▶️ Выполнение кода...'), true);
+    const result = await window.electronAPI.executeCommand(`${executor} ${tmpFile}`, activeProject.workspacePath);
+    const output = result.stdout || result.stderr || t('(нет вывода)');
+    appendBubble('7/24 IDE', `\`\`\`\n${output}\n\`\`\``, true);
+  } catch (err: any) {
+    appendBubble('7/24 IDE', `⚠️ ${t('Ошибка выполнения:')}\n\`\`\`\n${err.message || err}\n\`\`\``, true);
+  } finally {
+    // Cleanup: remove temp file after execution
+    try {
+      await window.electronAPI.executeCommand(`rm -f "${tmpFile}"`, activeProject.workspacePath);
+    } catch (_) {}
+  }
 }
 
 function appendBubble(
@@ -3141,6 +3197,18 @@ function renderAttachedFiles() {
   }
   
   bar.classList.remove('hidden');
+  
+  // Add clear all button
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'attached-clear-all';
+  clearBtn.title = t('Очистить все');
+  clearBtn.innerHTML = `<i data-lucide="x-circle"></i> ${esc(t('Очистить'))}`;
+  clearBtn.addEventListener('click', () => {
+    attachedFiles.clear();
+    renderAttachedFiles();
+  });
+  bar.appendChild(clearBtn);
+  
   for (const f of attachedFiles) {
     const chip = document.createElement('div');
     chip.className = 'file-chip';
@@ -3311,7 +3379,12 @@ function getMsgIndexInHistory(msgEl: HTMLElement): number {
   for (let i = activeProject!.chatHistory.length - 1; i >= 0; i--) {
     const h = activeProject!.chatHistory[i];
     if (!isAi && h.role === 'user' && h.content.includes(msgText.substring(0, 20))) return i;
-    if (isAi && h.role === 'assistant' && h.content === msgText) return i;
+    if (isAi && h.role === 'assistant') {
+      // AI content is raw markdown with XML tags; DOM textContent strips all HTML.
+      // Use a fuzzy prefix match instead of strict equality.
+      const stripped = h.content.replace(/<[^>]*>/g, '').trim();
+      if (stripped.substring(0, 80) === msgText.substring(0, 80) || h.content.substring(0, 80) === msgText.substring(0, 80)) return i;
+    }
   }
   return -1;
 }
@@ -3391,6 +3464,64 @@ function regenerateFromMessage(msgEl: HTMLElement) {
   renderChatHistory();
 
   // Re-run the agent from the last user message
+  agentStepCount = 0;
+  setGeneratingState(true);
+  runAgentStep();
+}
+
+function branchFromMessage(msgEl: HTMLElement) {
+  if (!activeProject || isGenerating) return;
+  const idx = getMsgIndexInHistory(msgEl);
+  if (idx < 0) return;
+
+  // Clone history up to and including this message
+  const branchHistory = activeProject.chatHistory.slice(0, idx + 1).map(m => ({ ...m }));
+
+  // Create a new project with branched history
+  const branchName = `${activeProject.name} (ветка)`;
+  const newProject: Project = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    name: branchName,
+    workspacePath: activeProject.workspacePath,
+    chatHistory: branchHistory,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    code: '',
+    scopePath: activeProject.scopePath || '',
+    pinnedFiles: [...(activeProject.pinnedFiles || [])],
+  };
+  projects.unshift(newProject);
+  saveProjects();
+  renderSidebarProjects();
+  switchToProject(newProject);
+  appendBubble('7/24 IDE', t('🔀 Ветка создана. История скопирована до выбранного сообщения.'), true);
+}
+
+function rerunToolFromIndex(toolIdx: number) {
+  if (!activeProject || isGenerating) return;
+  if (toolIdx < 0) return;
+
+  // Find the last AI message
+  const aiMessages = activeProject.chatHistory.filter(m => m.role === 'assistant');
+  if (aiMessages.length === 0) return;
+  const lastAi = aiMessages[aiMessages.length - 1];
+
+  // Find the user message that triggered the last AI response
+  const lastAiIdx = activeProject.chatHistory.indexOf(lastAi);
+  let userIdx = -1;
+  for (let i = lastAiIdx - 1; i >= 0; i--) {
+    if (activeProject.chatHistory[i].role === 'user') {
+      userIdx = i;
+      break;
+    }
+  }
+  if (userIdx < 0) return;
+
+  // Truncate everything after the user message and re-run
+  activeProject.chatHistory.splice(userIdx + 1);
+  saveProjects();
+  renderChatHistory();
+
   agentStepCount = 0;
   setGeneratingState(true);
   runAgentStep();
@@ -3729,6 +3860,15 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         let html = parseMarkdown(fullContent);
         html = formatToolTags(html);
         textEl.innerHTML = html;
+        // Show partial tool call indicator during streaming
+        const partialTools = toolCallsAcc.filter(tc => tc && tc.name && !tc.argsRaw.includes('</'));
+        if (partialTools.length > 0 && !textEl.querySelector('.tool-accordion')) {
+          const indicator = document.createElement('div');
+          indicator.className = 'streaming-tool-indicator';
+          indicator.innerHTML = `<i data-lucide="loader-2" class="action-spinner"></i> ${esc(t('Выполнение инструмента...'))}`;
+          textEl.appendChild(indicator);
+          refreshIcons();
+        }
         scrollToBottom();
         if (!fullContent.trim()) {
           textEl.innerHTML = '<span class="stream-cursor">|</span>';
@@ -3867,7 +4007,8 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         }
       }
     } catch (error: any) {
-      if (continueAttempts === 0) bubble.remove();
+      // Always remove bubble on error (including retry failures)
+      bubble.remove();
       if (error.name === 'AbortError') {
         throw new Error('Генерация прервана.');
       }
@@ -4613,26 +4754,7 @@ if (settings.fontSize !== 13) document.body.style.fontSize = settings.fontSize +
 const tabBuild = document.getElementById('mode-tab-build');
 const tabPlan = document.getElementById('mode-tab-plan');
 
-tabBuild?.addEventListener('click', () => {
-  if (isExecutingPlan) return;
-  appMode = 'build';
-  tabBuild.classList.add('active');
-  tabPlan?.classList.remove('active');
-  chatInput.placeholder = t('Опишите, что хотите создать или исправить...');
-});
-
-tabPlan?.addEventListener('click', () => {
-  if (isExecutingPlan) return;
-  appMode = 'plan';
-  tabPlan.classList.add('active');
-  tabBuild?.classList.remove('active');
-  chatInput.placeholder = t('Опишите, что хотите спроектировать и спланировать...');
-});
-
-// Workspace selection from starting preview prompt
-document.getElementById('btn-welcome-select-folder')?.addEventListener('click', () => {
-  btnSidebarSelectFolder.click();
-});
+// Mode toggles and welcome folder button are set up inside init() to avoid duplicate listeners.
 
 btnSend.addEventListener('click', () => { 
   const t = chatInput.value.trim(); 
@@ -5284,6 +5406,43 @@ document.addEventListener('keydown', (e) => {
     const next = (idx + 1) % projects.length;
     switchToProject(projects[next]);
   }
+  // Ctrl+K: focus chat search
+  if (e.ctrlKey && e.key === 'k') {
+    e.preventDefault();
+    const searchInput = document.getElementById('chat-search-input') as HTMLInputElement;
+    const searchBar = document.getElementById('chat-search-bar');
+    if (searchBar && searchInput) {
+      searchBar.classList.remove('hidden');
+      searchInput.focus();
+    }
+  }
+  // Ctrl+L: clear chat and start new
+  if (e.ctrlKey && e.key === 'l' && !e.shiftKey) {
+    e.preventDefault();
+    if (activeProject && !isGenerating) {
+      activeProject.chatHistory = [];
+      saveProjects();
+      renderChatHistory();
+      chatInput.focus();
+    }
+  }
+  // Ctrl+Shift+M: toggle Build/Plan mode
+  if (e.ctrlKey && e.shiftKey && e.key === 'M') {
+    e.preventDefault();
+    const newMode = appMode === 'build' ? 'plan' : 'build';
+    appMode = newMode;
+    const tb = document.getElementById('mode-tab-build');
+    const tp = document.getElementById('mode-tab-plan');
+    if (newMode === 'build') {
+      tb?.classList.add('active');
+      tp?.classList.remove('active');
+      chatInput.placeholder = t('Опишите, что хотите создать или исправить...');
+    } else {
+      tp?.classList.add('active');
+      tb?.classList.remove('active');
+      chatInput.placeholder = t('Опишите, что хотите спроектировать и спланировать...');
+    }
+  }
 });
 
 $$('.modal-backdrop').forEach(b => b.addEventListener('click', e => { if (e.target === b) b.classList.add('hidden'); }));
@@ -5352,6 +5511,74 @@ chatInput.addEventListener('input', () => {
     atRefs.classList.add('hidden');
   }
 });
+
+// Image paste support (Ctrl+V / Cmd+V)
+chatInput.addEventListener('paste', (e: ClipboardEvent) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (blob) handleImageFile(blob);
+      return;
+    }
+  }
+});
+
+// Image drag-and-drop support on chat input area
+const chatInputArea = document.querySelector('.chat-input-area') as HTMLElement;
+if (chatInputArea) {
+  chatInputArea.addEventListener('dragover', (e: DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = 'copy';
+    chatInputArea.classList.add('drag-over');
+  });
+  chatInputArea.addEventListener('dragleave', () => {
+    chatInputArea.classList.remove('drag-over');
+  });
+  chatInputArea.addEventListener('drop', (e: DragEvent) => {
+    e.preventDefault();
+    chatInputArea.classList.remove('drag-over');
+    const files = e.dataTransfer?.files;
+    if (!files) return;
+    for (const file of files) {
+      if (file.type.startsWith('image/')) {
+        handleImageFile(file);
+      }
+    }
+  });
+}
+
+async function handleImageFile(file: File) {
+  if (!activeProject) {
+    appendBubble('7/24 IDE', t('⚠️ Сначала откройте проект для работы с изображениями.'), true);
+    return;
+  }
+  if (!activeProject.workspacePath) {
+    appendBubble('7/24 IDE', t('⚠️ Рабочая папка не выбрана. Невозможно сохранить изображение.'), true);
+    return;
+  }
+  // Convert image to base64 and save to workspace
+  const ext = file.name.split('.').pop() || 'png';
+  const filename = `.7-24-images/paste-${Date.now()}.${ext}`;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const dataUrl = reader.result as string;
+    const base64Content = dataUrl.split(',')[1];
+    try {
+      // Use writeFile with base64 content marker
+      const content = `BASE64:${base64Content}`;
+      await window.electronAPI.writeFile(filename, content, activeProject!.workspacePath, true);
+      attachedFiles.add(filename);
+      renderAttachedFiles();
+      appendBubble('7/24 IDE', t('🖼️ Изображение прикреплено к контексту.'), true);
+    } catch (_) {
+      appendBubble('7/24 IDE', t('⚠️ Не удалось сохранить изображение. Попробуйте прикрепить файл через браузер файлов.'), true);
+    }
+  };
+  reader.readAsDataURL(file);
+}
 
 // ═══════════════════════════════════════════
 // UTILITY
@@ -5486,7 +5713,9 @@ function init() {
     if (isExecutingPlan) return;
     appMode = 'build';
     tabBuild.classList.add('active');
+    tabBuild.setAttribute('aria-selected', 'true');
     tabPlan?.classList.remove('active');
+    tabPlan?.setAttribute('aria-selected', 'false');
     chatInput.placeholder = t('Опишите, что хотите создать или исправить...');
   });
 
@@ -5494,7 +5723,9 @@ function init() {
     if (isExecutingPlan) return;
     appMode = 'plan';
     tabPlan.classList.add('active');
+    tabPlan.setAttribute('aria-selected', 'true');
     tabBuild?.classList.remove('active');
+    tabBuild?.setAttribute('aria-selected', 'false');
     chatInput.placeholder = t('Опишите, что хотите спроектировать и спланировать...');
   });
 
@@ -5916,6 +6147,18 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
         });
       }
     }
+
+    // Run Code Button Delegate Listener
+    const runBtn = (e.target as HTMLElement).closest('.btn-run-chat-code');
+    if (runBtn) {
+      const codeBlock = runBtn.closest('.code-block-chat');
+      const pre = codeBlock?.querySelector('pre');
+      const lang = codeBlock?.dataset.lang || '';
+      if (pre && activeProject?.workspacePath) {
+        const code = pre.textContent || '';
+        runCodeSnippet(code, lang);
+      }
+    }
   });
 
   // Accordion Expand/Collapse Delegate Listener on Chat Messages
@@ -5995,6 +6238,31 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
         startEditMessage(msgEl);
       } else if (action === 'regenerate') {
         regenerateFromMessage(msgEl);
+      } else if (action === 'branch') {
+        branchFromMessage(msgEl);
+      }
+    }
+
+    // Tool accordion action buttons (copy/rerun)
+    const toolActionBtn = (e.target as HTMLElement).closest('.tool-action-btn') as HTMLElement;
+    if (toolActionBtn) {
+      const accordion = toolActionBtn.closest('.tool-accordion') as HTMLElement;
+      const toolIdx = parseInt(accordion?.dataset.toolIdx || '-1');
+      const toolType = accordion?.dataset.toolType || '';
+      const action = toolActionBtn.dataset.action;
+      const aiBubbles = chatMessages.querySelectorAll('.chat-message.ai');
+      const lastAiBubble = aiBubbles[aiBubbles.length - 1];
+      const targetAccordion = lastAiBubble?.querySelector(`.tool-step-${toolIdx}`);
+      const contentEl = targetAccordion?.querySelector('.tool-accordion-content, .diff-widget-body');
+
+      if (action === 'copy' && contentEl) {
+        navigator.clipboard.writeText(contentEl.textContent || '').then(() => {
+          toolActionBtn.innerHTML = `<i data-lucide="check"></i>`;
+          refreshIcons();
+          setTimeout(() => { toolActionBtn.innerHTML = `<i data-lucide="copy"></i>`; refreshIcons(); }, 2000);
+        });
+      } else if (action === 'rerun' && toolIdx >= 0) {
+        rerunToolFromIndex(toolIdx);
       }
     }
   });

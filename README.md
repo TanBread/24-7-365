@@ -45,6 +45,22 @@ No more hangs on interactive prompts. Live stream terminal outputs and write dir
 ### 🧠 **2026-Ready Reasoning Chat**
 Use reasoning models without flooding the workspace. The chat renders collapsible reasoning blocks, readable tool call cards, copy actions, search, and Markdown export while preserving the conversation history locally. Tool parsing is tolerant of model quote-style variations, so read/write/command actions keep running instead of leaking raw XML into the chat.
 
+### 🖼️ **Image Paste & Drag-Drop**
+Paste images directly from clipboard (Ctrl+V) or drag-and-drop them into the chat. Images are automatically saved to your workspace and attached as context for the AI agent. Perfect for sharing screenshots, design mockups, or bug reports.
+
+### 🔀 **Conversation Branching**
+Every message has a "Branch" button that creates a new conversation fork with the history up to that point. Experiment freely without losing previous work.
+
+### ▶️ **Run Code from Chat**
+Code blocks in JavaScript, TypeScript, Python, and Shell now have a "Run" button for quick execution directly from the chat. No need to copy-paste into a terminal.
+
+### ⌨️ **Keyboard Shortcuts**
+- `Ctrl+K` — Quick chat search
+- `Ctrl+L` — Clear chat and start new
+- `Ctrl+Shift+M` — Toggle Build/Plan mode
+- `Ctrl+N` — New project
+- `Ctrl+,` — Open Settings
+
 ### 🧩 **Monaco Diff Reviews**
 Review proposed edits in a fullscreen Monaco-powered diff viewer before they touch disk, with accurate line alignment and syntax highlighting for large files.
 

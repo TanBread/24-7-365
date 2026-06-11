@@ -114,7 +114,7 @@
 
       <!-- Chat Panel -->
       <section class="chat-panel" id="chat-panel">
-        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-messages" id="chat-messages" role="log" aria-live="polite" aria-label="Чат с ассистентом"></div>
         <div id="chat-search-bar" class="chat-search-bar hidden">
           <i data-lucide="search" style="width:14px;height:14px;flex-shrink:0;color:var(--text-muted);"></i>
           <input type="text" id="chat-search-input" class="chat-search-input" placeholder="Поиск в чате...">
@@ -141,7 +141,7 @@
             <div class="pinned-files-list" id="pinned-files-list"></div>
           </div>
           <div class="input-wrapper">
-            <textarea id="chat-input" placeholder="Опишите, что хотите создать или исправить..." rows="1"></textarea>
+            <textarea id="chat-input" placeholder="Опишите, что хотите создать или исправить..." rows="1" aria-label="Сообщение ассистенту"></textarea>
             <div id="at-references" class="at-references hidden"></div>
           </div>
           <div class="input-actions-row">
@@ -158,11 +158,11 @@
               </div>
             </div>
             <div class="input-actions-right">
-              <div class="input-mode-toggle" id="input-mode-toggle">
-                <button class="mode-tab active" data-mode="build" id="mode-tab-build" title="Build — агент сразу пишет и правит код">
+              <div class="input-mode-toggle" id="input-mode-toggle" role="tablist" aria-label="Режим работы">
+                <button class="mode-tab active" data-mode="build" id="mode-tab-build" title="Build — агент сразу пишет и правит код" role="tab" aria-selected="true">
                   <i data-lucide="zap"></i><span>Build</span>
                 </button>
-                <button class="mode-tab" data-mode="plan" id="mode-tab-plan" title="Plan — сначала составить пошаговый план, затем собрать">
+                <button class="mode-tab" data-mode="plan" id="mode-tab-plan" title="Plan — сначала составить пошаговый план, затем собрать" role="tab" aria-selected="false">
                   <i data-lucide="map"></i><span>Plan</span>
                 </button>
               </div>

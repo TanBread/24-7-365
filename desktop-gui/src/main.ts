@@ -277,7 +277,9 @@ ipcMain.handle('read-file', async (_event, filePath: string, workspacePath: stri
   const resolvedPath = path.resolve(absolutePath);
   const resolvedWorkspace = path.resolve(workspacePath);
 
-  if (sandbox && !resolvedPath.startsWith(resolvedWorkspace)) {
+  // Use path.relative for robust containment check (prevents path traversal)
+  const rel = path.relative(resolvedWorkspace, resolvedPath);
+  if (sandbox && (rel.startsWith('..') || path.isAbsolute(rel))) {
     throw new Error(`Access Denied: Path is outside the sandbox: ${resolvedPath}`);
   }
 
@@ -290,7 +292,9 @@ ipcMain.handle('write-file', async (_event, filePath: string, content: string, w
   const resolvedPath = path.resolve(absolutePath);
   const resolvedWorkspace = path.resolve(workspacePath);
 
-  if (sandbox && !resolvedPath.startsWith(resolvedWorkspace)) {
+  // Use path.relative for robust containment check (prevents path traversal)
+  const rel = path.relative(resolvedWorkspace, resolvedPath);
+  if (sandbox && (rel.startsWith('..') || path.isAbsolute(rel))) {
     throw new Error(`Access Denied: Path is outside the sandbox: ${resolvedPath}`);
   }
 
@@ -300,7 +304,14 @@ ipcMain.handle('write-file', async (_event, filePath: string, content: string, w
   // files if the process is interrupted mid-write.
   const tmpPath = `${resolvedPath}.${process.pid}.${Date.now()}.tmp`;
   try {
-    await fs.promises.writeFile(tmpPath, content, 'utf-8');
+    // Support BASE64: prefix for binary data (images)
+    let writeData: string | Buffer;
+    if (content.startsWith('BASE64:')) {
+      writeData = Buffer.from(content.slice(7), 'base64');
+    } else {
+      writeData = content;
+    }
+    await fs.promises.writeFile(tmpPath, writeData);
     await fs.promises.rename(tmpPath, resolvedPath);
   } catch (err) {
     // Best-effort cleanup of the temp file on failure
@@ -575,7 +586,9 @@ ipcMain.handle('check-image-size', async (_event, filePath: string, workspacePat
     const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(workspacePath, filePath);
     const resolvedPath = path.resolve(absolutePath);
     const resolvedWorkspace = path.resolve(workspacePath);
-    if (!resolvedPath.startsWith(resolvedWorkspace)) {
+    // Use path.relative for robust containment check (prevents path traversal)
+    const rel = path.relative(resolvedWorkspace, resolvedPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
       throw new Error(`Access Denied: Path is outside the sandbox.`);
     }
     if (!fs.existsSync(resolvedPath)) {

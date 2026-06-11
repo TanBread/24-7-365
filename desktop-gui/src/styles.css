@@ -639,7 +639,6 @@ input, textarea, select {
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  scroll-behavior: smooth;
   position: relative;
 }
 
@@ -4185,6 +4184,115 @@ body.theme-dark .about-card {
   word-break: break-all;
   color: var(--text-secondary);
 }
+.tool-accordion-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+.tool-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+.tool-action-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.tool-action-btn i { width: 13px; height: 13px; }
+.msg-action-btn.branch:hover { color: var(--accent-green) !important; }
+.chat-input-area.drag-over {
+  outline: 2px dashed var(--accent-blue);
+  outline-offset: -2px;
+  background: rgba(59, 130, 246, 0.05);
+}
+.code-block-chat-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.btn-run-chat-code, .btn-copy-chat-code {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  transition: color 0.15s, background 0.15s;
+}
+.btn-run-chat-code:hover { color: var(--accent-green); background: var(--bg-hover); }
+.btn-copy-chat-code:hover { color: var(--text-primary); background: var(--bg-hover); }
+.btn-run-chat-code i, .btn-copy-chat-code i { width: 12px; height: 12px; }
+.attached-clear-all {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  transition: color 0.15s;
+}
+.attached-clear-all:hover { color: var(--accent-red); }
+.attached-clear-all i { width: 12px; height: 12px; }
+.streaming-tool-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-top: 8px;
+  background: var(--bg-panel);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.streaming-tool-indicator .action-spinner {
+  width: 14px;
+  height: 14px;
+  animation: spin 1s linear infinite;
+}
+/* AI message subtle left border for better visual distinction */
+body.theme-dark .chat-message.ai .message-bubble,
+body.theme-dark .chat-message.ai {
+  border-left: 2px solid rgba(255,255,255,0.06);
+  padding-left: 10px;
+}
+body.theme-light .chat-message.ai .message-bubble,
+body.theme-light .chat-message.ai {
+  border-left: 2px solid rgba(0,0,0,0.08);
+  padding-left: 10px;
+}
+/* Chat empty state */
+.chat-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 40px 20px;
+}
+.chat-empty-state i {
+  width: 32px;
+  height: 32px;
+  opacity: 0.4;
+}
 
 /* ─── Markdown Elements inside Chat bubbles ─── */
 .message-text p {
@@ -4423,9 +4531,6 @@ body.theme-dark .code-block-chat {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-  color: var(--text-secondary);
-  flex: 1;
 }
 
 /* Selected Component Context Bar & Inspect Styles */
@@ -5811,12 +5916,14 @@ button:focus-visible,
 
 /* ─── Mobile / narrow window: collapse sidebar gracefully ────────────────── */
 @media (max-width: 720px) {
+  .workspace { flex-direction: column !important; }
   .sidebar { width: 56px; min-width: 56px; max-width: 56px; }
   .sidebar-projects-list, .sidebar-search-box, .sidebar-workspace-details,
   .sidebar-folder-mini, .sidebar-new-chat-btn span { display: none !important; }
   .sidebar-new-chat-btn { width: 36px; padding: 8px 0; }
   .resize-handle { display: none; }
-  .chat-panel { min-width: 0; max-width: none; width: auto; flex: 1; }
+  .chat-panel { min-width: 0; max-width: none; width: 100%; flex: none; }
+  .preview-panel { min-width: 0; max-width: none; width: 100%; flex: none; }
 }
 
 
