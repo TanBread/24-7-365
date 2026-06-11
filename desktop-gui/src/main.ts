@@ -756,7 +756,7 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
 
   // Disable signature verification on Windows for self-signed or unsigned setups
-  autoUpdater.verifyUpdateCodeSignature = async () => {
+  (autoUpdater as any).verifyUpdateCodeSignature = async () => {
     return null;
   };
 
@@ -813,4 +813,3 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
-

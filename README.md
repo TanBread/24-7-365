@@ -42,6 +42,12 @@ Enable Git Auto-Commits in Settings to automatically stage files and create Git 
 ### 💬 **Interactive Terminal (Stdin)**
 No more hangs on interactive prompts. Live stream terminal outputs and write directly to standard input (like `[y/n]` prompts, package configurations, or password requests) from the terminal input bar. You can stop/kill active processes at any time and navigate stdin input history using the Up/Down arrow keys.
 
+### 🧠 **Reasoning-Aware Chat**
+Use reasoning models without flooding the workspace. The chat renders collapsible reasoning blocks, readable tool call cards, copy actions, search, and Markdown export while preserving the conversation history locally.
+
+### 🧩 **Monaco Diff Reviews**
+Review proposed edits in a fullscreen Monaco-powered diff viewer before they touch disk, with accurate line alignment and syntax highlighting for large files.
+
 ### ⚡ **Instant Feedback Loop**
 See your creations come to life. The app features a live preview panel that displays your HTML, CSS, and JS applications. It only refreshes when relevant files change, ensuring a zero-flicker preview as you build.
 
@@ -63,6 +69,7 @@ Your code belongs to you. All projects, chats, settings, and snapshots are store
 
 If you want to know how the magic happens:
 *   **Dual Mode Conversational Workspace:** Switch between **Build mode** (direct edits and fast iterations) and **Plan mode** (the agent generates a step-by-step checklist, which is then verified and executed chunk-by-chunk with isolated contexts).
+*   **Fallback Models and Updater:** Configure a fallback model for transient provider failures and receive GitHub release update prompts inside the desktop app.
 *   **AST Compression:** Files are parsed and compressed using syntax trees so that large files don't consume your entire model context budget.
 *   **Self-Evolving Skills:** After a successful build, the assistant reflects on the conversation history and compiles reusable *skills* (short rule sets) that auto-activate when similar tasks are requested in the future.
 *   **Prompt Caching:** Optimised system prompts for Anthropic models reduce generation latency and lower API costs.

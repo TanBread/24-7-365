@@ -927,6 +927,10 @@ input, textarea, select {
   height: 11px;
 }
 
+.msg-action-btn span {
+  line-height: 1;
+}
+
 .msg-action-btn.regenerate:hover {
   color: var(--accent-purple);
 }
@@ -1125,10 +1129,15 @@ input, textarea, select {
   display: none;
 }
 
-.reasoning-block.collapsed .reasoning-header::after {
-  content: ' ▸ развёрнуто';
+.reasoning-header::after {
+  content: '▾';
+  margin-left: auto;
   font-size: 9px;
-  opacity: 0.5;
+  opacity: 0.55;
+}
+
+.reasoning-block.collapsed .reasoning-header::after {
+  content: '▸';
 }
 
 /* Model Search Input */
@@ -5470,6 +5479,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   border-radius: 6px;
 }
 .msg-action-btn i { width: 13px; height: 13px; }
+.msg-action-btn span { line-height: 1; }
 .msg-action-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .msg-action-btn.regenerate:hover,
 .msg-action-btn.edit:hover { color: var(--text-primary); }
@@ -5967,4 +5977,3 @@ body.theme-dark .diff-line-content .token-value { color: #79c0ff; }
 body.theme-dark .diff-line-content .token-tag { color: #7ee787; }
 body.theme-dark .diff-line-content .token-attr { color: #ffa657; }
 body.theme-dark .diff-line-content .token-property { color: #d2a8ff; }
-

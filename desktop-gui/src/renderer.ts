@@ -75,7 +75,7 @@ interface ProjectSnapshot {
   planSteps: PlanStep[];
   files: Record<string, string>;
 }
-interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string; }
+interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string; reasoningContent?: string; }
 interface MCPServerConfig {
   id: string;
   name: string;
@@ -116,6 +116,9 @@ interface AppSettings {
   llmProvider?: 'openrouter' | 'ollama';
   ollamaUrl?: string;
   gitAutoCommit?: boolean;
+  gitVerifyCommit?: boolean;
+  gitCommitPrefix?: string;
+  ollamaContextSize?: number;
   mcpServers?: MCPServerConfig[];
 }
 
@@ -286,7 +289,7 @@ function getLLMUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
 
-function getLLMHeaders(customKey?: string) {
+function getLLMHeaders(customKey?: string): Record<string, string> {
   if (settings.llmProvider === 'ollama') {
     return {
       'Content-Type': 'application/json'
@@ -1051,7 +1054,7 @@ function parseMarkdown(text: string): string {
         <div class="reasoning-block">
           <div class="reasoning-header">
             <i data-lucide="brain"></i>
-            <span>Размышления</span>
+            <span>${esc(t('Размышления'))}</span>
           </div>
           <div class="reasoning-content">${esc(thinkContent)}</div>
         </div>
@@ -1214,7 +1217,7 @@ function parseMarkdown(text: string): string {
       <div class="code-block-chat">
         <div class="code-block-chat-header">
           <span>${lang || 'code'}</span>
-          <button class="btn-copy-chat-code"><i data-lucide="copy"></i><span>Копировать</span></button>
+          <button class="btn-copy-chat-code"><i data-lucide="copy"></i><span>${esc(t('Копировать'))}</span></button>
         </div>
         <pre><code>${highlighted}</code></pre>
       </div>
@@ -1252,7 +1255,7 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
   const replaceTag = (match: string, type: string, title: string, details: string) => {
     const idx = toolIndex++;
     const hasResult = isHistory && toolResults[idx] !== undefined;
-    const resultText = hasResult ? toolResults[idx] : 'Ожидание запуска...';
+    const resultText = hasResult ? toolResults[idx] : t('Ожидание запуска...');
     
     const isFailed = hasResult && (resultText.startsWith('Ошибка') || resultText.includes('ОШИБКА') || resultText.includes('отклонено'));
     const codeMatch = resultText.match(/Код завершения:\s*(\d+)/);
@@ -1572,11 +1575,11 @@ function appendBubble(sender: string, text: string, isAi: boolean, msgIndex?: nu
   }
 
   const actionsBar = isAi
-    ? `<div class="msg-actions"><button class="msg-action-btn copy" data-action="copy" title="Копировать" aria-label="Копировать"><i data-lucide="copy"></i></button></div>`
+    ? `<div class="msg-actions"><button class="msg-action-btn copy" data-action="copy" title="${esc(t('Копировать'))}" aria-label="${esc(t('Копировать'))}"><i data-lucide="copy"></i></button></div>`
     : buildMsgActions(false);
 
   const modelLabel = isAi && settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
-  const tokenInfo = isAi && activeProject ? `${(activeProject.totalTokensPrompt || 0) + (activeProject.totalTokensCompletion || 0)} токенов` : '';
+  const tokenInfo = isAi && activeProject ? `${(activeProject.totalTokensPrompt || 0) + (activeProject.totalTokensCompletion || 0)} ${t('токенов')}` : '';
   const footerHtml = (modelLabel || tokenInfo) ? `<div class="msg-footer">${modelLabel ? `<span class="msg-footer-model">${modelLabel}</span>` : ''}${tokenInfo ? `<span class="msg-footer-tokens">${tokenInfo}</span>` : ''}</div>` : '';
 
   div.innerHTML = `<div class="message-text">${formattedText}</div><div class="msg-bottom">${actionsBar}${footerHtml}</div>`;
@@ -1615,7 +1618,7 @@ function renderChatHistory() {
             <div class="reasoning-block">
               <div class="reasoning-header">
                 <i data-lucide="brain"></i>
-                <span>Размышления</span>
+                <span>${esc(t('Размышления'))}</span>
               </div>
               <div class="reasoning-content">${escapedReasoning}</div>
             </div>
@@ -1628,7 +1631,7 @@ function renderChatHistory() {
       
       const actionsHtml = buildMsgActions(true);
       const modelLabel = settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
-      const tokenInfo = activeProject ? `${(activeProject.totalTokensPrompt || 0) + (activeProject.totalTokensCompletion || 0)} токенов` : '';
+      const tokenInfo = activeProject ? `${(activeProject.totalTokensPrompt || 0) + (activeProject.totalTokensCompletion || 0)} ${t('токенов')}` : '';
       const footerHtml = (modelLabel || tokenInfo) ? `<div class="msg-footer">${modelLabel ? `<span class="msg-footer-model">${modelLabel}</span>` : ''}${tokenInfo ? `<span class="msg-footer-tokens">${tokenInfo}</span>` : ''}</div>` : '';
       div.innerHTML = `<div class="message-text">${formattedText}</div><div class="msg-bottom">${actionsHtml}${footerHtml}</div>`;
       chatMessages.appendChild(div);
@@ -3781,7 +3784,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
               reasoningBlock.innerHTML = `
                 <div class="reasoning-header">
                   <i data-lucide="brain"></i>
-                  <span>Размышления</span>
+                  <span>${esc(t('Размышления'))}</span>
                 </div>
                 <div class="reasoning-content"></div>
               `;
@@ -4894,9 +4897,9 @@ $('#btn-copy-code').addEventListener('click', () => {
   if (!activeProject?.code) return; 
   navigator.clipboard.writeText(activeProject.code).then(() => { 
     const b = $('#btn-copy-code'); 
-    b.innerHTML = '<i data-lucide="check"></i> Скопировано!'; 
+    b.innerHTML = `<i data-lucide="check"></i> ${esc(t('Скопировано'))}`;
     refreshIcons(); 
-    setTimeout(() => { b.innerHTML = '<i data-lucide="copy"></i> Копировать'; refreshIcons(); }, 2000); 
+    setTimeout(() => { b.innerHTML = `<i data-lucide="copy"></i> ${esc(t('Копировать'))}`; refreshIcons(); }, 2000);
   }); 
 });
 
@@ -5619,7 +5622,7 @@ function init() {
       pill.appendChild(span);
       
       const delBtn = document.createElement('div');
-      delBtn.title = 'Удалить из избранного';
+      delBtn.title = t('Удалить из избранного');
       delBtn.innerHTML = '<i data-lucide="x" style="width: 12px; height: 12px;"></i>';
       delBtn.style.display = 'flex';
       delBtn.style.alignItems = 'center';
@@ -5630,7 +5633,7 @@ function init() {
       delBtn.addEventListener('mouseleave', () => delBtn.style.opacity = '0.6');
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        settings.favoriteModels = settings.favoriteModels.filter(id => id !== mId);
+        settings.favoriteModels = (settings.favoriteModels || []).filter(id => id !== mId);
         saveSettings();
         renderFavoriteModelsPills();
         updateFavoriteModelStarUI();
@@ -5826,10 +5829,10 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
       const pre = copyBtn.closest('.code-block-chat')?.querySelector('pre');
       if (pre) {
         navigator.clipboard.writeText(pre.textContent || '').then(() => {
-          copyBtn.innerHTML = '<i data-lucide="check"></i> <span>Готово</span>';
+          copyBtn.innerHTML = `<i data-lucide="check"></i> <span>${esc(t('Готово'))}</span>`;
           refreshIcons();
           setTimeout(() => {
-            copyBtn.innerHTML = '<i data-lucide="copy"></i> <span>Копировать</span>';
+            copyBtn.innerHTML = `<i data-lucide="copy"></i> <span>${esc(t('Копировать'))}</span>`;
             refreshIcons();
           }, 2000);
         });
@@ -5863,9 +5866,9 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
       if (action === 'copy') {
         const msgText = msgEl.querySelector('.message-text')?.textContent || '';
         navigator.clipboard.writeText(msgText).then(() => {
-          actionBtn.innerHTML = '<i data-lucide="check"></i>Скопировано';
+          actionBtn.innerHTML = `<i data-lucide="check"></i><span>${esc(t('Скопировано'))}</span>`;
           refreshIcons();
-          setTimeout(() => { actionBtn.innerHTML = '<i data-lucide="copy"></i>Копировать'; refreshIcons(); }, 2000);
+          setTimeout(() => { actionBtn.innerHTML = `<i data-lucide="copy"></i><span>${esc(t('Копировать'))}</span>`; refreshIcons(); }, 2000);
         });
       } else if (action === 'edit') {
         startEditMessage(msgEl);
@@ -6458,7 +6461,8 @@ function saveMcpServer() {
   
   if (!settings.mcpServers) settings.mcpServers = [];
   
-  const newServer: MCPServerConfig = { name, active, command, args, env };
+  const existingServer = editingMcpIndex !== null ? settings.mcpServers[editingMcpIndex] : null;
+  const newServer: MCPServerConfig = { id: existingServer?.id || genId(), name, active, command, args, env };
   
   if (editingMcpIndex !== null) {
     settings.mcpServers[editingMcpIndex] = newServer;

@@ -82,19 +82,19 @@ body {
   height: 45vw;
   border-radius: 50%;
   filter: blur(120px);
-  opacity: 0.06;
+  opacity: 0.025;
   pointer-events: none;
   z-index: -1;
 }
 .glow-top-left {
   top: -10vw;
   left: -10vw;
-  background: radial-gradient(circle, #3b82f6 0%, transparent 70%); /* Soft Blue wash */
+  background: radial-gradient(circle, #64748b 0%, transparent 70%);
 }
 .glow-bottom-right {
   bottom: 10vw;
   right: -10vw;
-  background: radial-gradient(circle, #8b5cf6 0%, transparent 70%); /* Soft Violet wash */
+  background: radial-gradient(circle, #94a3b8 0%, transparent 70%);
 }
 
 /* ═══════════ NAVIGATION BAR ═══════════ */

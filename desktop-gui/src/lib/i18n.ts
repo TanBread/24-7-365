@@ -273,6 +273,12 @@ const DICT: Record<string, [string, string]> = {
   'Редактировать сообщение': ['Edit message', '编辑消息'],
   'Редактировать': ['Edit', '编辑'],
   'Думаю над задачей...': ['Thinking about the task...', '正在思考任务...'],
+  'Размышления': ['Reasoning', '推理'],
+  'Готово': ['Done', '完成'],
+  'Скопировано': ['Copied', '已复制'],
+  'Ожидание запуска...': ['Waiting to run...', '等待运行...'],
+  'токенов': ['tokens', 'tokens'],
+  'Удалить из избранного': ['Remove from favorites', '从收藏中移除'],
   'Связь прервана': ['Connection lost', '连接已断开'],
   'Продолжить': ['Continue', '继续'],
 

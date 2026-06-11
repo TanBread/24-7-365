@@ -4,6 +4,19 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.3.6] - 2026-06-11
+
+This QA release stabilizes packaging, tightens TypeScript coverage, and refreshes the chat, localization, website, and release metadata.
+
+### Fixed
+*   **Release Build:** Pinned the Electron build script to the desktop GUI `tsconfig.json` so frontend builds no longer crawl parent folders and fail with Windows access errors.
+*   **TypeScript Health:** Brought the desktop renderer and updater types back in sync with current features including Ollama context size, Git commit verification, reasoning content, and MCP server IDs.
+*   **Chat UI:** Localized reasoning/copy/token labels, improved copy button states, and made reasoning block collapse affordances clearer.
+
+### Changed
+*   **Website & Docs:** Updated the website, README, and release notes for v1.3.6 with current Monaco diff, xterm stdin, reasoning, fallback model, MCP/Ollama, auto-commit, and updater capabilities.
+*   **Release Metadata:** Updated app, package, lockfile, backend, About screen, and download link versions to 1.3.6.
+
 ## [1.3.5] - 2026-06-10
 
 This hotfix release addresses issues with streaming reasoning, infinite tool loops, and improves layout interaction.

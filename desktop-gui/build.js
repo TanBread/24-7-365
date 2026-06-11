@@ -18,8 +18,14 @@ async function copyDir(src, dest) {
 
 async function build() {
   try {
+    const common = {
+      absWorkingDir: __dirname,
+      tsconfig: path.join(__dirname, 'tsconfig.json'),
+    };
+
     // 1. Compile Main Process
     await esbuild.build({
+      ...common,
       entryPoints: [path.join(__dirname, 'src/main.ts')],
       bundle: true,
       platform: 'node',
@@ -31,6 +37,7 @@ async function build() {
 
     // 2. Compile Preload Script
     await esbuild.build({
+      ...common,
       entryPoints: [path.join(__dirname, 'src/preload.ts')],
       bundle: true,
       platform: 'node',
@@ -41,6 +48,7 @@ async function build() {
 
     // 3. Compile Renderer Process
     await esbuild.build({
+      ...common,
       entryPoints: [path.join(__dirname, 'src/renderer.ts')],
       bundle: true,
       platform: 'browser',
