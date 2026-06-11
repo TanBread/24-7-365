@@ -934,6 +934,11 @@ function switchToProject(p: Project) {
   }
 
   maybeShowResumeOnLoad();
+  
+  // Set focus to chat input
+  setTimeout(() => {
+    chatInput.focus();
+  }, 100);
 }
 
 // If the last turn belongs to the user (or a tool result with no following answer),
@@ -5276,8 +5281,8 @@ document.addEventListener('keydown', (e) => {
       document.getElementById('btn-stop-generation')?.dispatchEvent(new Event('click'));
     }
   }
-  // Ctrl+Shift+P: quick folder select
-  if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+  // Ctrl+Shift+P or Ctrl+O: quick folder select
+  if ((e.ctrlKey && e.shiftKey && e.key === 'P') || (e.ctrlKey && e.key === 'o')) {
     e.preventDefault();
     btnSidebarSelectFolder.click();
   }

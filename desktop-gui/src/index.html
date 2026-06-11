@@ -217,24 +217,24 @@
         </div>
         <div class="preview-content" id="preview-content">
           <div class="welcome-state" id="welcome-state">
-            <div class="welcome-icon"><i data-lucide="wand-2"></i></div>
+            <div class="welcome-icon"><i data-lucide="sparkles"></i></div>
             <h2>Что вы хотите создать?</h2>
-            <p>Опишите вашу идею в чате — ИИ-агент мгновенно превратит её в работающее приложение.</p>
-            <div class="welcome-folder-prompt" id="welcome-folder-prompt" style="margin-bottom: var(--space-5); background: var(--bg-panel-alt); padding: 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); max-width: 460px; width: 100%;">
-              <p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: 12px; line-height: 1.45;">
-                ⚠️ Для работы ИИ-агента необходимо выбрать рабочую папку на вашем компьютере:
-              </p>
-              <button id="btn-welcome-select-folder" class="primary-btn">
+            <p>Опишите вашу идею в чате, и агент мгновенно напишет код.</p>
+            <div class="welcome-folder-prompt hidden" id="welcome-folder-prompt" style="margin-bottom: var(--space-5); text-align: center;">
+              <button id="btn-welcome-select-folder" class="ghost-btn" style="border: 1px solid var(--border-default); background: transparent;">
                 <i data-lucide="folder-open"></i><span>Выбрать рабочую папку</span>
               </button>
             </div>
             <div class="welcome-examples">
-              <button class="example-chip" data-prompt="Создай красивый калькулятор с тёмной темой и плавными анимациями кнопок"><i data-lucide="calculator"></i> Калькулятор</button>
-              <button class="example-chip" data-prompt="Создай современный лендинг для кофейни «Аромат» с hero-секцией, меню и формой обратной связи"><i data-lucide="store"></i> Лендинг</button>
-              <button class="example-chip" data-prompt="Создай Kanban-доску для задач с колонками: «Сделать», «В работе», «Готово» и перетаскиванием карточек"><i data-lucide="trello"></i> Канбан</button>
-              <button class="example-chip" data-prompt="Создай аналоговые часы с минималистичным дизайном, показывающие текущее время с плавной секундной стрелкой"><i data-lucide="clock"></i> Часы</button>
-              <button class="example-chip" data-prompt="Создай дашборд погоды с 5-дневным прогнозом, иконками, графиками температуры и поиском по городам"><i data-lucide="cloud-sun"></i> Погода</button>
-              <button class="example-chip" data-prompt="Создай сайт-портфолио с анимированным hero, галереей проектов, секцией навыков и формой контактов"><i data-lucide="user"></i> Портфолио</button>
+              <button class="example-chip" data-prompt="Создай красивый калькулятор с тёмной темой и плавными анимациями кнопок">Калькулятор</button>
+              <button class="example-chip" data-prompt="Создай современный лендинг для кофейни «Аромат» с hero-секцией">Лендинг кофейни</button>
+              <button class="example-chip" data-prompt="Создай Kanban-доску для задач с перетаскиванием карточек">Канбан доска</button>
+              <button class="example-chip" data-prompt="Создай аналоговые часы с минималистичным дизайном">Часы</button>
+              <button class="example-chip" data-prompt="Создай дашборд погоды с 5-дневным прогнозом и поиском по городам">Дашборд погоды</button>
+            </div>
+            <div class="hotkey-hint">
+              <span><kbd>Ctrl+N</kbd> Новый проект</span>
+              <span><kbd>Ctrl+O</kbd> Открыть папку</span>
             </div>
           </div>
           <div class="iframe-wrapper" id="iframe-wrapper" style="display:none; position: relative; width: 100%; height: 100%;">
