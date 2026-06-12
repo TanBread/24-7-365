@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & Discussions
+    url: https://github.com/strmax195-hue/7-24-IDE/discussions
+    about: Ask questions, share builds, and discuss ideas with the community.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/strmax195-hue/7-24-IDE/security/advisories/new
+    about: Please report security issues privately, not as public issues.
