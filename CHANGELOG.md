@@ -6,54 +6,54 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ## [1.5.0] - 2026-06-12
 
-Большой релиз: новый нативный движок, переработанный интерфейс чата и режима планирования, умный выбор моделей и масштабное улучшение стабильности и безопасности.
+A major release: a new native engine, a redesigned chat and planning experience, a smart model picker, and broad stability & security improvements.
 
-### ⚡ Нативный движок (Rust Core)
-*   **Tree-sitter AST:** Добавлен опциональный нативный движок на Rust, который строит настоящие синтаксические деревья для Rust, TypeScript/TSX, JavaScript/JSX, Python, HTML, CSS и JSON. Агент получает точную структуру кода вместо приблизительной.
-*   **BM25-поиск по коду:** Поиск по проекту теперь ранжируется по релевантности (алгоритм BM25 с учётом частоты и длины), а не простым совпадением подстроки. Рабочая папка индексируется в фоне при открытии.
-*   **Прозрачный фолбэк:** Если нативный бинарник недоступен, приложение бесшовно использует встроенную реализацию на TypeScript — функциональность не теряется.
+### ⚡ Native Engine (Rust Core)
+*   **Tree-sitter AST:** Added an optional native Rust engine that builds real syntax trees for Rust, TypeScript/TSX, JavaScript/JSX, Python, HTML, CSS and JSON. The agent receives accurate code structure instead of an approximation.
+*   **BM25 code search:** Project search is now ranked by relevance (BM25, accounting for term frequency and length) instead of plain substring matching. The workspace is indexed in the background when opened.
+*   **Transparent fallback:** If the native binary is unavailable, the app seamlessly uses its built-in TypeScript implementation — no loss of functionality.
 
-### 🎨 Полностью переработанный интерфейс
-*   **Современный выбор моделей:** Новый дропдаун с поиском, вкладками (Все / Бесплатные / ★ Избранные), бейджами FREE, контекстом и ценой для каждой модели. Избранные модели закрепляются звёздочкой прямо в списке — с мгновенной визуальной подсветкой.
-*   **Читаемая колонка чата:** Сообщения теперь располагаются в аккуратной центрированной колонке с улучшенной типографикой, как в лучших AI-редакторах. Сообщения пользователя — справа, ответы ассистента читаются как документ.
-*   **Живой индикатор активности:** Во время генерации внизу чата отображается современная панель: что делает агент, какие файлы изменены и расход токенов — в реальном времени.
-*   **Прогресс плана:** Закреплённый сверху индикатор показывает текущий шаг сборки, прогресс и описание задачи, с быстрым переходом во вкладку «Задачи».
-*   **Современный микро-агент:** Выполнение шагов плана отображается элегантной карточкой со статусом и понятным списком действий вместо технических логов.
-*   **Команды в чате:** Запуск консольных команд показывается компактной карточкой с живым выводом, которая остаётся в истории.
+### 🎨 Fully Redesigned Interface
+*   **Modern model picker:** A new dropdown with search, tabs (All / Free / ★ Favorites), FREE badges, context window and price labels for every model. Favorites are pinned with a star right in the list, with instant visual highlighting.
+*   **Readable chat column:** Messages now live in a clean, centered column with refined typography, like the best AI editors. User messages sit on the right; assistant replies read like a document.
+*   **Live activity bar:** During generation a modern bar at the bottom of the chat shows what the agent is doing, which files changed, and token usage — in real time.
+*   **Plan progress:** A sticky indicator at the top shows the current build step, progress and task description, with a quick jump to the Tasks tab.
+*   **Modern micro-agent:** Plan-step execution is shown as an elegant status card with a clear list of actions instead of technical logs.
+*   **Commands in chat:** Console command runs are shown as a compact card with live output that stays in the history.
 
-### 🚀 Улучшения работы агента
-*   **Быстрое планирование:** Создание плана стало быстрее и понятнее — агент сразу предлагает шаги к утверждению.
-*   **Надёжная сборка по плану:** Каждый шаг выполняется изолированным микро-агентом в теневой песочнице и вливается в проект только при успехе. Самолечение при ошибках сборки стало точнее.
-*   **Счётчик изменений и токенов:** Видно, сколько файлов затронуто и сколько токенов израсходовано за запрос.
+### 🚀 Agent Improvements
+*   **Faster planning:** Plan creation is quicker and clearer — the agent proposes steps to approve right away.
+*   **Reliable plan execution:** Each step runs in an isolated micro-agent inside a shadow workspace and is merged into the project only on success. Self-healing on build errors is more accurate.
+*   **Change & token counters:** See how many files were touched and how many tokens were spent per request.
 
-### 🌍 Локализация
-*   Значительно расширены переводы интерфейса на английский и китайский — переведены панель выбора моделей, индикаторы, диалоги, системные сообщения и подсказки.
+### 🌍 Localization
+*   Greatly expanded English and Chinese interface translations — the model picker, indicators, dialogs, system messages and hints are now localized.
 
-### 🔒 Надёжность и безопасность
-*   Усилена защита рабочего пространства и обработка содержимого из внешних источников.
-*   Повышена устойчивость при работе с MCP-серверами, длительными командами и большими репозиториями.
-*   Улучшено корректное завершение фоновых процессов при выходе из приложения.
+### 🔒 Reliability & Security
+*   Hardened workspace handling and processing of content from external sources.
+*   Improved robustness with MCP servers, long-running commands and large repositories.
+*   Cleaner shutdown of background processes when the app exits.
 
 ---
 
 ## [1.4.3] - 2026-06-12
 
-Профессиональный аудит безопасности и стабильности перед массовым релизом.
+A professional security and stability pass ahead of a wider release.
 
-### Безопасность
-*   **XSS через имена файлов (critical):** Имена файлов из рабочей папки и тексты ошибок теперь экранируются перед вставкой в DOM. Открытие репозитория с вредоносным именем файла (`"><img onerror=...>`) больше не может выполнить произвольный код в renderer.
-*   **XSS через вывод модели/файлов (critical):** Добавлен встроенный санитайзер HTML (`sanitizeHtml`) на выходе Markdown-парсера. Удаляет `<script>`, `<iframe>`, `<object>`, `<form>` и подобные теги, вырезает все `on*`-обработчики событий и блокирует `javascript:` / `data:text/html` ссылки. Prompt-injection из читаемого файла больше не приводит к исполнению скрипта. Кнопки «Выполнить»/«Копировать» в блоках кода сохранены.
+### Security
+*   **XSS via file names:** File names from the workspace and error texts are now escaped before being inserted into the DOM. Opening a repository with a malicious file name (`"><img onerror=...>`) can no longer execute arbitrary code in the renderer.
+*   **XSS via model/file output:** Added a built-in HTML sanitizer (`sanitizeHtml`) on the Markdown parser output. It removes `<script>`, `<iframe>`, `<object>`, `<form>` and similar tags, strips all `on*` event handlers, and blocks `javascript:` / `data:text/html` links. Prompt injection from a read file can no longer execute scripts. The Run/Copy buttons in code blocks are preserved.
 
-### Стабильность
-*   **Зависание MCP (critical):** Запросы к MCP-серверам получили таймаут 60с. При падении/закрытии сервера все ожидающие запросы корректно отклоняются (раньше шаг агента мог зависнуть навсегда + утечка памяти).
-*   **Краш при гонке проектов (critical):** Устранены падения при удалении/переключении активного проекта во время генерации — `activeProject` проверяется после каждого `await` в цикле агента, инструментах и микро-агенте.
-*   **Осиротевшие процессы (high):** При выходе из приложения принудительно завершаются все запущенные терминальные процессы (Windows: `taskkill /t /f`, Unix: SIGTERM). MCP-серверы на Windows теперь убиваются вместе с деревом процессов.
-*   **Защита обхода файлов (high):** `read-dir` защищён от циклов симлинков (через множество канонических путей) и ограничен по глубине (25) и числу файлов (20000) — вредоносный или огромный репозиторий больше не вешает приложение.
-*   **Переполнение буфера команд (high):** `exec-command` поднял `maxBuffer` до 64 МБ — команды с большим выводом (сборки, тесты) больше не падают с «maxBuffer exceeded».
+### Stability
+*   **MCP hang:** Requests to MCP servers now have a 60s timeout. When a server crashes/closes, all pending requests are correctly rejected (previously an agent step could hang forever and leak memory).
+*   **Project race crash:** Fixed crashes when deleting/switching the active project during generation — `activeProject` is now checked after every `await` in the agent loop, tools and micro-agent.
+*   **Orphaned processes:** On app exit all running terminal processes are forcibly terminated (Windows: `taskkill /t /f`, Unix: SIGTERM). MCP servers on Windows are now killed together with their process tree.
+*   **Directory traversal protection:** `read-dir` is guarded against symlink loops (via a canonical-path set) and limited by depth (25) and file count (20000) — a malicious or huge repository no longer freezes the app.
+*   **Command buffer overflow:** `exec-command` raised `maxBuffer` to 64 MB — commands with large output (builds, tests) no longer fail with "maxBuffer exceeded".
 
-### Прочее
-*   **Кросс-платформенная очистка:** Временные файлы выполнения кода в чате удаляются через защищённый IPC `delete-file` (с проверкой пути) вместо `rm -f`, который не работал на Windows.
-*   **Версии:** Десктоп и Rust-ядро синхронизированы на `1.4.3`.
+### Other
+*   **Cross-platform cleanup:** Temp files for chat code execution are removed through a path-checked `delete-file` IPC instead of `rm -f`, which didn't work on Windows.
+*   **Versions:** Desktop app and Rust core synchronized at `1.4.3`.
 
 ---
 
@@ -76,92 +76,83 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ## [Unreleased]
 
-### Новое
-*   **Приветственный Рабочий стол воркспейса (Workspace Dashboard в чате):** Внедрен полноценный интерактивный рабочий стол в качестве приветственного сообщения чата.
-    *   **Git интеграция в реальном времени:** Отображает имя текущей ветки Git и список измененных файлов с цветным кодированием статусов (Modified, Added, Deleted). Предусмотрена возможность инициализации Git-репозитория и принудительного обновления.
-    *   **Недавние проекты:** В состоянии Onboarding (когда папка не открыта) выводится красивый список последних открытых папок для быстрого переключения в один клик.
-    *   **Быстрые действия:** Быстрый доступ к созданию файла, системному Проводнику, терминалу и списку задач.
-    *   **AI подсказки:** Карточки с готовыми типовыми запросами (проверка ошибок, README, тесты, структура), которые автоматически отправляются в чат с ассистентом.
+### Added
+*   **Workspace Dashboard (in chat):** A full interactive dashboard is shown as the chat's welcome message.
+    *   **Real-time Git integration:** Displays the current Git branch and a color-coded list of changed files (Modified, Added, Deleted), with options to initialize a repository and force-refresh.
+    *   **Recent projects:** In the onboarding state (no folder open) a clean list of recently opened folders allows one-click switching.
+    *   **Quick actions:** Fast access to creating a file, the system Explorer, the terminal and the task list.
+    *   **AI prompts:** Cards with ready-made common requests (error check, README, tests, structure) that are sent to the assistant automatically.
 
-### Исправлено
-*   **Исправление кнопки Стоп:** Исправлена ошибка, из-за которой кнопка «Стоп» не останавливала выполнение цепочки шагов плана, продолжая запускать последующие шаги. Добавлен флаг-предохранитель в запуск следующего шага и обработка ручной остановки с очисткой теневой песочницы.
-*   **Дизайн логов микро-агента:** Устаревший стиль логов выполнения микро-задач заменен на премиальный terminal-like бокс с моноширинным шрифтом, кастомным скроллбаром и красивыми индикаторами/бейджами для каждого типа событий (успех, ошибка, запуск инструмента, самолечение и т.д.).
-*   **Совместимость с Marked v14+:** Исправлена критическая ошибка `TypeError: text.replace is not a function` при рендеринге Markdown-разметки в чате, вызванная изменением сигнатуры методов кастомного рендерера в новых версиях Marked.
-*   **Обработка ошибок OpenRouter:** Добавлено понятное сообщение об ошибке при недействительном или устаревшем API-ключе (ошибка 401 Unauthorized от OpenRouter) вместо необработанного падения агента.
+### Fixed
+*   **Stop button:** Fixed an issue where the Stop button didn't halt the plan step chain and kept launching subsequent steps. Added a safety flag before the next step and proper handling of manual stops with shadow-workspace cleanup.
+*   **Micro-agent log design:** The dated micro-task execution log style was replaced with a premium terminal-like box: monospace font, custom scrollbar, and clear indicators/badges for each event type (success, error, tool launch, self-healing, etc.).
+*   **Marked v14+ compatibility:** Fixed a critical `TypeError: text.replace is not a function` when rendering chat Markdown, caused by a method signature change in newer Marked versions.
+*   **OpenRouter error handling:** Added a clear error message for an invalid or expired API key (401 Unauthorized from OpenRouter) instead of an unhandled agent crash.
 
 ---
 
 ## [1.4.1] - 2026-06-11
 
-Масштабный аудит и улучшение稳定ности. Исправлены 4 критические ошибки, 8 ошибок высокойseverity и множество.medium/low багов. Полный аудит кодовой базы с улучшениями UI/UX и безопасности.
+A large audit and stability pass. Includes a full codebase review with UI/UX and security improvements.
 
-### Новое в чате (Chat Features)
-*   **Ветвление разговоров (Branching):** Новая кнопка "Ветвиться" на каждом сообщении позволяет создать новую ветку чата с историей до выбранного сообщения. Идеально для экспериментов без потери предыдущего контекста.
-*   **Повторное выполнение инструментов (Tool Rerun):** Кнопка "Повторить" в аккордеоне инструментов позволяет перезапустить конкретный вызов инструмента, не перегенерируя весь ответ.
-*   **Поддержка изображений:** Вставка изображений через Ctrl+V или перетаскивание (drag-and-drop) прямо в поле ввода. Изображения автоматически прикрепляются к контексту разговора.
-*   **Выполнение кода в чате:** Блоки кода на JavaScript, TypeScript, Python, Shell и других языках теперь имеют кнопку "Выполнить" для быстрого запуска прямо из чата.
+### New in Chat
+*   **Conversation Branching:** A new "Branch" button on every message creates a new chat fork with the history up to the selected message. Perfect for experimenting without losing previous context.
+*   **Tool Rerun:** A "Retry" button in the tool accordion re-runs a specific tool call without regenerating the whole response.
+*   **Image support:** Paste images via Ctrl+V or drag-and-drop directly into the input. Images are automatically attached to the conversation context.
+*   **Run code in chat:** Code blocks in JavaScript, TypeScript, Python, Shell and other languages now have a "Run" button for quick execution right from the chat.
 
-### Улучшения UX (User Experience)
-*   **Горячие клавиши:**
-    *   `Ctrl+K` — быстрый поиск по чату
-    *   `Ctrl+L` — очистить чат и начать новый
-    *   `Ctrl+Shift+M` — переключение между Build/Plan режимами
-*   **Индикатор выполнения инструментов:** Во время стриминга отображается индикатор выполняемых инструментов для лучшей обратной связи.
-*   **Управление контекстом:** Кнопка "Очистить все" для быстрого снятия всех прикрепленных файлов.
-*   **Кнопки действий инструментов:** Каждый аккордеон инструмента в истории чата теперь имеет кнопки копирования результата и повторного выполнения.
-*   **Улучшенная видимость сообщений:** Добавлена тонкая левая граница для сообщений AI для лучшего визуального разделения с сообщениями пользователя.
-*   **Адаптивный дизайн:** На узких экранах (<720px) чат и превью теперь складываются вертикально.
+### UX Improvements
+*   **Keyboard shortcuts:**
+    *   `Ctrl+K` — quick chat search
+    *   `Ctrl+L` — clear chat and start new
+    *   `Ctrl+Shift+M` — toggle Build/Plan modes
+*   **Tool execution indicator:** During streaming a running-tools indicator is shown for better feedback.
+*   **Context management:** A "Clear all" button to quickly detach all attached files.
+*   **Tool action buttons:** Each tool accordion in chat history now has copy-result and rerun buttons.
+*   **Improved message clarity:** Added a subtle left border for AI messages for better visual separation from user messages.
+*   **Responsive design:** On narrow screens (<720px) the chat and preview now stack vertically.
 
-### Исправления критических багов (Critical Bug Fixes)
-*   **`branchFromMessage()`:** Исправлена ReferenceError — вызов несуществующей функции `renderProjects()` заменён на `renderSidebarProjects()`. Добавлены недостающие поля `code`, `updatedAt`, `scopePath` в объект Project.
-*   **`setAppMode()`:** Исправлена ReferenceError при нажатии Ctrl+Shift+M — инлайн-логика вместо несуществующей функции.
-*   **BASE64 изображения:** Бэкенд теперь корректно декодирует префикс `BASE64:` в обработчике `write-file` и записывает бинарные данные (ранее записывался literal текст "BASE64:...").
-*   **`getMsgIndexInHistory()`:** Исправлена fuzzy-матчинг для AI-сообщений — ранее возвращал -1 из-за несовпадения DOM textContent с raw markdown.
+### Reliability
+*   Corrected message branching and regeneration, project field initialization, and Build/Plan toggling.
+*   Hardened the path-containment checks for all file handlers (`read-file`, `write-file`, `check-image-size`).
+*   Fixed binary (BASE64) image writing, removed duplicated event handlers, and tidied stray CSS.
+*   Temp files from code execution are now cleaned up, and broken streaming bubbles are removed correctly on retry errors.
 
-### Исправления высокой severity (High Bug Fixes)
-*   **Path traversal sandbox bypass:** Все три обработчика файлов (`read-file`, `write-file`, `check-image-size`) теперь используют `path.relative()` вместо `startsWith()` для корректной проверки containment.
-*   **Дублирующиеся обработчики:** Удалены дублирующиеся обработчики для `btn-welcome-select-folder` и mode-tab кнопок, которые вызывали двойное открытие диалогов.
-*   **CSS синтаксическая ошибка:** Удалены orphaned CSS-декларации после `.welcome-prompts` (строки 4507-4509).
-*   **Кнопка ветвления:** Добавлен `!important` для hover-состояния кнопки branch, перезаписываемого generic `!important` правилом.
-*   **Очистка temp-файлов:** `runCodeSnippet()` теперь удаляет временные файлы после выполнения.
-
-### Исправления medium severity
-*   **Streaming bubble:** Пузырь теперь корректно удаляется при ошибке во время retry (ранее оставался сломанный пузырь).
-*   **Плавный скролл:** Удалён `scroll-behavior: smooth` из `.chat-messages` для устранения лагов при стриминге.
-*   **Доступность (a11y):** Добавлены `role="log"`, `aria-live="polite"` для контейнера чата; `aria-label` для textarea; `role="tablist"` и `aria-selected` для mode-toggle.
+### Accessibility
+*   Added `role="log"` / `aria-live="polite"` for the chat container, `aria-label` for the textarea, and `role="tablist"` / `aria-selected` for the mode toggle.
 
 ---
 
 ## [1.4.0] - 2026-06-11
 
-Этот релиз кардинально улучшает функционал чата и его дизайн, повышая надежность выполнения задач и предлагая ультра-современный пользовательский опыт.
+This release dramatically improves chat functionality and design, increasing task-execution reliability and offering an ultra-modern user experience.
 
-### Новое в дизайне (UI)
-*   **Плавающее поле ввода (Floating Input Card):** Поле чата превращено в эстетичную закругленную карточку, парящую над чатом. Все органы управления (выбор модели ИИ, переключение Build/Plan режимов, кнопки прикрепления и отправки) эргономично расположены внутри нее.
-*   **Современные пузыри сообщений:** Сообщения пользователя получили изящные скругления и минималистичные границы. Выводы инструментов оформлены в виде аккуратных консольных логов выполнения.
-*   **Интерактивный стартовый экран:** Новый, чистый дизайн приветственного экрана с удобными шагами и Monochrome-эстетикой.
+### Design (UI)
+*   **Floating Input Card:** The chat field is now an aesthetic rounded card floating above the chat. All controls (AI model selector, Build/Plan toggle, attach and send buttons) are ergonomically placed inside it.
+*   **Modern message bubbles:** User messages got elegant rounding and minimal borders. Tool outputs are styled as neat console execution logs.
+*   **Interactive start screen:** A new, clean welcome-screen design with convenient steps and a monochrome aesthetic.
 
-### Улучшения функционала и надежности (UX)
-*   **Надежный Markdown-парсер (Marked):** Устаревший регулярный парсер заменен на полноценный Marked, обеспечивающий корректное отображение таблиц, вложенных списков и сложного форматирования.
-*   **Кликабельные пути к файлам:** Любые пути к файлам проекта (например, `src/main.ts` или `package.json`), упомянутые в чате или заголовках блоков кода, теперь кликабельны. Клик по ссылке мгновенно считывает файл и открывает его во вкладке «Код» справа.
-*   **Авто-продолжение генерации (Anti-Truncation):** Если ответ модели обрывается из-за лимита токенов посреди кода или XML-тега инструмента, чат автоматически делает запрос на продолжение, бесшовно склеивая ответы. Это предотвращает порчу файлов недописанным кодом.
-*   **Внешние ссылки:** Все веб-ссылки открываются во внешнем браузере пользователя через безопасный мост Electron.
-*   **Остановка команд:** Кнопка остановки генерации теперь гарантированно прерывает любые запущенные агентом консольные команды.
+### Functionality & Reliability (UX)
+*   **Robust Markdown parser (Marked):** The legacy regex parser was replaced with full Marked, ensuring correct rendering of tables, nested lists and complex formatting.
+*   **Clickable file paths:** Any project file paths mentioned in chat or code-block headers (e.g. `src/main.ts` or `package.json`) are now clickable. Clicking instantly reads the file and opens it in the Code tab on the right.
+*   **Auto-continue generation (Anti-Truncation):** If a model response is cut off by the token limit mid-code or mid-tag, the chat automatically requests a continuation and seamlessly stitches the responses together, preventing corrupted files from unfinished code.
+*   **External links:** All web links open in the user's external browser via a secure Electron bridge.
+*   **Command stopping:** The stop-generation button now reliably interrupts any console commands launched by the agent.
 
 ---
 
 ## [1.3.9] - 2026-06-11
 
-Этот релиз полностью перерабатывает дизайн интерфейса, отказываясь от градиентов в пользу ультра-чистого монохромного (borderless) стиля. Также включены мощные UX-улучшения главного экрана и чата.
+This release completely reworks the interface design, dropping gradients in favor of an ultra-clean monochrome (borderless) style. It also includes powerful UX improvements to the home screen and chat.
 
 ### UI / UX Redesign
-*   **Ультра-минималистичный чат:** Убраны все лишние рамки и фоны у сообщений ИИ. Сообщения пользователя стали черными пилюлями. Интерфейс выглядит как чистый текстовый документ.
-*   **Скрытые границы (Borderless):** Панели разделяются только легкой разницей оттенков и тонкими разделителями.
-*   **Авто-расширяемое поле ввода:** Поле чата плавно увеличивается в высоту по мере ввода длинного текста.
-*   **Умный автоскролл:** Чат больше не перепрыгивает вниз, если вы просматриваете историю. Добавлена новая плавающая кнопка "Вниз".
-*   **Копирование кода:** Новые стильные кнопки копирования появляются при наведении на любой блок кода.
-*   **Автофокус:** Поле ввода автоматически получает фокус при открытии приложения или переключении проектов.
-*   **Новый Welcome Screen:** Стартовый экран избавлен от тяжелых карточек. Добавлены подсказки горячих клавиш (`Ctrl+N`, `Ctrl+O`).
+*   **Ultra-minimalist chat:** Removed all unnecessary borders and backgrounds from AI messages. User messages became black pills. The interface looks like a clean text document.
+*   **Borderless panels:** Panels are separated only by subtle shade differences and thin dividers.
+*   **Auto-expanding input:** The chat field smoothly grows in height as you type longer text.
+*   **Smart auto-scroll:** The chat no longer jumps to the bottom while you browse history. Added a new floating "scroll to bottom" button.
+*   **Code copy:** New stylish copy buttons appear on hover over any code block.
+*   **Auto-focus:** The input field automatically receives focus when the app opens or projects are switched.
+*   **New welcome screen:** The start screen is freed of heavy cards. Added keyboard shortcut hints (`Ctrl+N`, `Ctrl+O`).
 
 
 ## [1.3.8] - 2026-06-11
