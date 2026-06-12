@@ -124,13 +124,13 @@ export function parseToolTags(text: string): ParsedTool[] {
   const tools: ParsedTool[] = [];
   let match: RegExpExecArray | null;
 
-  const rawReadDir = /<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>)/g;
+  const rawReadDir = /<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>|>)/g;
   while ((match = rawReadDir.exec(text)) !== null) {
     const attrs = parseToolAttrs(match[1]);
     if (attrs.path) tools.push({ type: 'read_dir', params: { path: attrs.path }, rawTag: match[0] });
   }
 
-  const rawReadFile = /<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>)/g;
+  const rawReadFile = /<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>|>)/g;
   while ((match = rawReadFile.exec(text)) !== null) {
     const attrs = parseToolAttrs(match[1]);
     if (attrs.path) {
@@ -138,13 +138,22 @@ export function parseToolTags(text: string): ParsedTool[] {
     }
   }
 
-  const rawWriteFile = /<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|$)/g;
+  // ── write_file ──
+  // The lazy `[\s\S]*?` is *not* enough on its own: when the model output is
+  // split between two completions (anti-truncation), an unclosed
+  // `<write_file path="a">` block can be silently followed by a fully-formed
+  // `<write_file path="b">…</write_file>`. Without a guard, the lazy match
+  // greedily captures the second file's body too, swapping the contents.
+  // We close the body either at `</write_file>`, at the next `<write_file …>`
+  // (the previous one was unterminated), or at end of input.
+  const rawWriteFile = /<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|(?=<write_file\b)|$)/g;
   while ((match = rawWriteFile.exec(text)) !== null) {
     const attrs = parseToolAttrs(match[1]);
     if (attrs.path) tools.push({ type: 'write_file', params: { path: attrs.path, content: match[2] }, rawTag: match[0] });
   }
 
-  const rawEditFile = /<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|$)/g;
+  // ── edit_file ── same protection against neighbouring tag bleed.
+  const rawEditFile = /<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|(?=<edit_file\b)|$)/g;
   while ((match = rawEditFile.exec(text)) !== null) {
     const attrs = parseToolAttrs(match[1]);
     const innerContent = match[2];
@@ -155,13 +164,13 @@ export function parseToolTags(text: string): ParsedTool[] {
     }
   }
 
-  const rawExecCmd = /<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>)/g;
+  const rawExecCmd = /<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>|>)/g;
   while ((match = rawExecCmd.exec(text)) !== null) {
     const attrs = parseToolAttrs(match[1]);
     if (attrs.command) tools.push({ type: 'execute_command', params: { command: attrs.command }, rawTag: match[0] });
   }
 
-  const rawSearchCode = /<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>)/g;
+  const rawSearchCode = /<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>|>)/g;
   while ((match = rawSearchCode.exec(text)) !== null) {
     const attrs = parseToolAttrs(match[1]);
     if (attrs.query) tools.push({ type: 'search_code', params: { query: attrs.query }, rawTag: match[0] });

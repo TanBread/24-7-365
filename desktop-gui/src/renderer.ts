@@ -18,6 +18,8 @@ declare global {
       readDir: (workspacePath: string) => Promise<{ path: string; isDir: boolean; size: number }[]>;
       readFile: (filePath: string, workspacePath: string, sandbox: boolean) => Promise<string>;
       writeFile: (filePath: string, content: string, workspacePath: string, sandbox: boolean) => Promise<boolean>;
+      deleteFile: (filePath: string, workspacePath: string) => Promise<boolean>;
+      getAppVersion: () => Promise<string>;
       openExternal: (url: string) => Promise<boolean>;
       executeCommand: (command: string, workspacePath: string) => Promise<{ code: number; stdout: string; stderr: string }>;
       executeCommandStream: (command: string, workspacePath: string, execId: string) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -50,6 +52,26 @@ declare global {
       mcpReinit: (serversJson: string) => Promise<boolean>;
       mcpListTools: () => Promise<any[]>;
       mcpCallTool: (serverName: string, toolName: string, args: any) => Promise<any>;
+      coreStatus: () => Promise<{
+        available: boolean; version?: string; files?: number; docs?: number;
+        languages?: string[]; reason?: string;
+      }>;
+      coreParseAst: (code: string, ext: string) => Promise<{
+        status: 'success' | 'skipped' | 'error';
+        language: string;
+        nodes_count: number;
+        nodes: { name: string; node_type: string; line_start: number; line_end: number }[];
+      } | null>;
+      coreIndexFile: (filePath: string, content: string) => Promise<{ status: string; chunks: number } | null>;
+      coreIndexFiles: (files: { file_path: string; content: string }[]) => Promise<{ files_indexed: number; chunks: number } | null>;
+      coreRemoveFile: (filePath: string) => Promise<{ status: string; removed: boolean } | null>;
+      coreSearchRag: (query: string, limit?: number) => Promise<{
+        status: 'success';
+        query: string;
+        results_count: number;
+        results: { file_path: string; line_start: number; line_end: number; chunk_content: string; score: number }[];
+      } | null>;
+      coreClearIndex: () => Promise<{ status: string } | null>;
     }
   }
 }
@@ -515,6 +537,10 @@ interface PlanStep {
   status: 'pending' | 'active' | 'done' | 'failed';
 }
 let planSteps: PlanStep[] = [];
+// Timer handle for the deferred `executeNextStep` call after a step completes.
+// Cleared by the Stop button so that an aborted plan doesn't auto-resume the
+// next step a second later.
+let nextStepTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ─── DOM ───
 const $ = (s: string) => document.querySelector(s) as HTMLElement;
@@ -526,6 +552,7 @@ const btnSend = $('#btn-send') as HTMLButtonElement;
 const loadingIndicator = $('#loading-indicator');
 const previewIframe = $('#preview-iframe') as HTMLIFrameElement;
 const welcomeState = $('#welcome-state');
+const dashboardView = $('#dashboard-view');
 const iframeWrapper = $('#iframe-wrapper');
 const codeView = $('#code-view');
 const codeDisplay = $('#code-display');
@@ -864,16 +891,37 @@ function createProject(name = 'Новый проект'): Project {
 }
 
 function updateSidebarFolderUI(p: Project) {
+  const attachBtn = document.getElementById('btn-chat-attach-context');
+  const detachBtn = document.getElementById('btn-chat-detach-context');
+  const topbarScopeInput = document.getElementById('topbar-scope-input') as HTMLInputElement | null;
+
   if (p.workspacePath) {
     const folderName = p.workspacePath.split(/[\\/]/).pop() || p.workspacePath;
     sidebarFolderPath.textContent = folderName;
     sidebarFolderPath.title = p.workspacePath;
     btnSidebarClearFolder.classList.remove('hidden');
     btnSidebarOpenExplorer.style.display = '';
-    // Show scope section if scope is set
     if (p.scopePath) {
       document.getElementById('sidebar-workspace-details')?.classList.remove('hidden');
       sidebarScopeInput.value = p.scopePath;
+    } else {
+      sidebarScopeInput.value = '';
+    }
+    if (topbarScopeInput) {
+      topbarScopeInput.value = p.scopePath || '';
+    }
+
+    if (attachBtn) {
+      attachBtn.title = p.workspacePath;
+      const span = attachBtn.querySelector('span');
+      if (span) span.textContent = folderName;
+      const icon = attachBtn.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', 'folder');
+      }
+    }
+    if (detachBtn) {
+      detachBtn.classList.remove('hidden');
     }
   } else {
     sidebarFolderPath.textContent = t('Папка не выбрана');
@@ -882,7 +930,31 @@ function updateSidebarFolderUI(p: Project) {
     btnSidebarOpenExplorer.style.display = 'none';
     document.getElementById('sidebar-workspace-details')?.classList.add('hidden');
     sidebarScopeInput.value = '';
+    if (topbarScopeInput) {
+      topbarScopeInput.value = '';
+    }
+
+    if (attachBtn) {
+      attachBtn.title = t('Подключить рабочую папку');
+      const span = attachBtn.querySelector('span');
+      if (span) span.textContent = t('Подключить контекст');
+      const icon = attachBtn.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', 'paperclip');
+      }
+    }
+    if (detachBtn) {
+      detachBtn.classList.add('hidden');
+    }
   }
+
+  const contextWrap = document.querySelector('.agentic-context-wrap');
+  if (contextWrap && (window as any).lucide) {
+    (window as any).lucide.createIcons();
+  }
+
+  updateFilterButtonUI();
+  updateLowcodeContextPlaceholder();
 }
 
 async function setWorkspaceFolder(folder: string) {
@@ -897,10 +969,73 @@ async function setWorkspaceFolder(folder: string) {
   addRecentFolder(folder);
   appendBubble('Система', `${t('📂 Рабочая папка установлена')}: ${folder}`, true);
   renderPreview();
-  const activeTab = (document.querySelector('.ptab.active') as HTMLElement)?.dataset.tab || 'preview';
-  if (activeTab === 'files') refreshWorkspaceFilesUI();
+  refreshWorkspaceFilesUI();
   renderSidebarProjects();
   renderAgentTabs();
+  // Kick off background indexing for the native search engine. Failure is
+  // silent — the agent's <search_code> tool falls back to a TS scan.
+  tryIndexWorkspaceBackground(folder).catch(() => {});
+}
+
+/**
+ * Best-effort background re-index of a workspace folder into the native
+ * BM25 engine. Skips silently if the Rust core is not available, keeps the
+ * batch under reasonable size limits, and never throws to its caller.
+ */
+async function tryIndexWorkspaceBackground(folder: string): Promise<void> {
+  if (!folder || !window.electronAPI?.coreStatus || !window.electronAPI?.coreIndexFiles) return;
+  let status: { available: boolean } | null = null;
+  try {
+    status = await window.electronAPI.coreStatus();
+  } catch {
+    return;
+  }
+  if (!status?.available) return;
+
+  try {
+    await window.electronAPI.coreClearIndex?.();
+    const files = await window.electronAPI.readDir(folder);
+    const textExts = new Set([
+      'js','ts','jsx','tsx','vue','svelte','html','css','scss','sass','json',
+      'md','py','rs','go','java','c','cpp','h','hpp','php','rb','yml','yaml','txt','sql','toml','rb',
+    ]);
+
+    const batch: { file_path: string; content: string }[] = [];
+    let totalBytes = 0;
+    const MAX_BYTES_PER_BATCH = 5_000_000;
+    const MAX_FILE_BYTES = 500_000;
+
+    let indexed = 0;
+    for (const f of files) {
+      if (f.isDir) continue;
+      if (f.path.startsWith('.shadow-workspace')) continue;
+      if (f.path.includes('node_modules/')) continue;
+      if (f.size > MAX_FILE_BYTES) continue;
+      const ext = f.path.toLowerCase().split('.').pop() || '';
+      if (!textExts.has(ext)) continue;
+
+      let content = '';
+      try {
+        content = await window.electronAPI.readFile(f.path, folder, false);
+      } catch { continue; }
+      batch.push({ file_path: f.path, content });
+      totalBytes += content.length;
+      if (totalBytes >= MAX_BYTES_PER_BATCH) {
+        const res = await window.electronAPI.coreIndexFiles(batch.splice(0, batch.length));
+        if (res) indexed += res.files_indexed || 0;
+        totalBytes = 0;
+      }
+    }
+    if (batch.length > 0) {
+      const res = await window.electronAPI.coreIndexFiles(batch);
+      if (res) indexed += res.files_indexed || 0;
+    }
+    if (indexed > 0) {
+      console.log(`[core-backend] indexed ${indexed} files for workspace ${folder}`);
+    }
+  } catch (err) {
+    console.warn('[core-backend] background indexing failed:', err);
+  }
 }
 
 function switchToProject(p: Project) { 
@@ -930,10 +1065,7 @@ function switchToProject(p: Project) {
   const desktopBtn = document.querySelector('.device-btn[data-device="desktop"]');
   if (desktopBtn) desktopBtn.classList.add('active');
   
-  const activeTab = (document.querySelector('.ptab.active') as HTMLElement)?.dataset.tab || 'preview';
-  if (activeTab === 'files') {
-    refreshWorkspaceFilesUI();
-  }
+  refreshWorkspaceFilesUI();
 
   maybeShowResumeOnLoad();
   
@@ -959,6 +1091,8 @@ function maybeShowResumeOnLoad() {
 function updateProjectNameUI() { 
   const name = activeProject?.name || 'Новый проект';
   titlebarProjectName.textContent = name; 
+  const agenticTitle = document.getElementById('agentic-chat-title-text');
+  if (agenticTitle) agenticTitle.textContent = name;
 }
 
 function renderAgentTabs() {
@@ -967,10 +1101,11 @@ function renderAgentTabs() {
 
 function renderSidebarProjects() {
   sidebarProjectsList.innerHTML = '';
-  
-  const searchBox = document.getElementById('sidebar-chat-search');
+
+  // The `hidden` class lives on the wrapper, not the input itself.
+  const searchBox = document.getElementById('sidebar-search-box');
   if (projects.length === 0) {
-    sidebarProjectsList.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 11px;">Нет недавних чатов</div>';
+    sidebarProjectsList.innerHTML = `<div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 11px;">${esc(t('Нет проектов'))}</div>`;
     if (searchBox) searchBox.classList.add('hidden');
     return;
   }
@@ -1065,18 +1200,36 @@ function parseXmlAttrs(attrString: string): Record<string, string> {
 const markedRenderer = new marked.Renderer();
 
 // Custom link renderer: open external links in browser, files in Monaco editor
-markedRenderer.link = (href, title, text) => {
-  const cleanHref = href || '';
+markedRenderer.link = (tokenOrHref: any, title?: string, text?: string) => {
+  let href = '';
+  let cleanText = '';
+  if (tokenOrHref && typeof tokenOrHref === 'object') {
+    href = tokenOrHref.href || '';
+    cleanText = tokenOrHref.text || '';
+  } else {
+    href = tokenOrHref || '';
+    cleanText = text || '';
+  }
+  const cleanHref = href;
   if (cleanHref.startsWith('http://') || cleanHref.startsWith('https://') || cleanHref.startsWith('mailto:')) {
-    return `<a class="chat-external-link" href="${esc(cleanHref)}" title="${esc(cleanHref)}">${text}</a>`;
+    return `<a class="chat-external-link" href="${esc(cleanHref)}" title="${esc(cleanHref)}">${cleanText}</a>`;
   }
   // Otherwise treat as file link
-  return `<a class="chat-file-link" data-path="${esc(cleanHref)}" href="#" title="${esc(t('Открыть файл'))}">${text}</a>`;
+  return `<a class="chat-file-link" data-path="${esc(cleanHref)}" href="#" title="${esc(t('Открыть файл'))}">${cleanText}</a>`;
 };
 
 // Custom code renderer: add copy button and handle language or path header
-markedRenderer.code = (code, language) => {
-  const lang = (language || 'code').trim();
+markedRenderer.code = (tokenOrCode: any, language?: string) => {
+  let code = '';
+  let lang = '';
+  if (tokenOrCode && typeof tokenOrCode === 'object') {
+    code = tokenOrCode.text || '';
+    lang = tokenOrCode.lang || '';
+  } else {
+    code = tokenOrCode || '';
+    lang = language || '';
+  }
+  lang = (lang || 'code').trim();
   const highlighted = highlightCode(code, lang);
   
   let headerText = esc(lang);
@@ -1110,7 +1263,14 @@ markedRenderer.code = (code, language) => {
 const pathRegex = /\b([a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)+\.[a-zA-Z0-9_-]+|[a-zA-Z0-9_.-]+\.(?:ts|js|json|css|html|toml|rs|md|txt|py|sh|go))\b/g;
 
 // Custom text renderer to dynamically turn raw file paths in plain text into links
-markedRenderer.text = (text) => {
+markedRenderer.text = (tokenOrText: any) => {
+  let text = '';
+  if (tokenOrText && typeof tokenOrText === 'object') {
+    text = tokenOrText.text || '';
+  } else {
+    text = tokenOrText || '';
+  }
+  if (typeof text !== 'string') return '';
   return text.replace(pathRegex, (match) => {
     if (/^\d+(\.\d+)+$/.test(match)) {
       return esc(match);
@@ -1174,14 +1334,14 @@ function parseMarkdown(text: string): string {
   };
 
   // Regexes matching tool tags with either single- or double-quoted attributes.
-  const readDirRegex = /<read_dir\b[^>]*\s*(?:\/>|>\s*<\/read_dir>)/g;
-  const readFileRegex = /<read_file\b[^>]*\s*(?:\/>|>\s*<\/read_file>)/g;
+  const readDirRegex = /<read_dir\b[^>]*\s*(?:\/>|>\s*<\/read_dir>|>)/g;
+  const readFileRegex = /<read_file\b[^>]*\s*(?:\/>|>\s*<\/read_file>|>)/g;
   const writeFileRegex = /<write_file\b[^>]*>[\s\S]*?(?:<\/write_file>|$)/g;
   const editFileRegex = /<edit_file\b[^>]*>[\s\S]*?(?:<\/edit_file>|$)/g;
-  const execCmdRegex = /<execute_command\b[^>]*\s*(?:\/>|>\s*<\/execute_command>)/g;
-  const searchCodeRegex = /<search_code\b[^>]*\s*(?:\/>|>\s*<\/search_code>)/g;
-  const listCompRegex = /<list_components\s*(?:\/>|>\s*<\/list_components>)/g;
-  const checkImgRegex = /<check_image_size\b[^>]*\s*(?:\/>|>\s*<\/check_image_size>)/g;
+  const execCmdRegex = /<execute_command\b[^>]*\s*(?:\/>|>\s*<\/execute_command>|>)/g;
+  const searchCodeRegex = /<search_code\b[^>]*\s*(?:\/>|>\s*<\/search_code>|>)/g;
+  const listCompRegex = /<list_components\s*(?:\/>|>\s*<\/list_components>|>)/g;
+  const checkImgRegex = /<check_image_size\b[^>]*\s*(?:\/>|>\s*<\/check_image_size>|>)/g;
   const orphanToolCloseRegex = /<\/(?:read_dir|read_file|write_file|edit_file|execute_command|search_code|list_components|check_image_size)>/g;
 
   // Replace tags with placeholders
@@ -1203,6 +1363,10 @@ function parseMarkdown(text: string): string {
     parsedHtml = esc(tempText).replace(/\n/g, '<br>');
   }
 
+  // Sanitize the model/file-derived HTML to neutralise XSS (script tags,
+  // event handlers, javascript: URLs, etc.) before it touches innerHTML.
+  parsedHtml = sanitizeHtml(parsedHtml);
+
   // Restore tool tag placeholders
   for (let i = 0; i < toolPlaceholders.length; i++) {
     parsedHtml = parsedHtml.replace(`%%TOOLPLACEHOLDER${i}%%`, toolPlaceholders[i]);
@@ -1211,14 +1375,58 @@ function parseMarkdown(text: string): string {
   return thinkHtml + parsedHtml;
 }
 
+/**
+ * Minimal, dependency-free HTML sanitizer for rendered markdown.
+ * Removes dangerous elements (script/style/iframe/object/embed/form...),
+ * strips all `on*` event-handler attributes, and blocks javascript:/data:
+ * URLs in href/src. Runs in the renderer (DOMParser is available).
+ */
+function sanitizeHtml(html: string): string {
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const FORBIDDEN_TAGS = new Set([
+      'SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'FORM',
+      'LINK', 'META', 'BASE',
+    ]);
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_ELEMENT);
+    const toRemove: Element[] = [];
+    let node = walker.nextNode() as Element | null;
+    while (node) {
+      if (FORBIDDEN_TAGS.has(node.tagName)) {
+        toRemove.push(node);
+      } else {
+        // Strip event handlers and dangerous URL attributes.
+        for (const attr of Array.from(node.attributes)) {
+          const name = attr.name.toLowerCase();
+          const value = attr.value.trim().toLowerCase();
+          if (name.startsWith('on')) {
+            node.removeAttribute(attr.name);
+          } else if ((name === 'href' || name === 'src' || name === 'xlink:href') &&
+                     (value.startsWith('javascript:') || value.startsWith('data:text/html') || value.startsWith('vbscript:'))) {
+            node.removeAttribute(attr.name);
+          } else if (name === 'style' && /expression\s*\(|javascript:|url\s*\(\s*['"]?\s*javascript:/i.test(attr.value)) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      }
+      node = walker.nextNode() as Element | null;
+    }
+    for (const el of toRemove) el.remove();
+    return doc.body.innerHTML;
+  } catch (err) {
+    console.error('sanitizeHtml failed, falling back to text escaping:', err);
+    return esc(html);
+  }
+}
+
 function highlightCode(code: string, lang: string): string {
   const cleanLang = (lang || '').toLowerCase().trim();
   let escaped = esc(code);
 
   if (cleanLang === 'html' || cleanLang === 'xml' || cleanLang === 'svg') {
     escaped = escaped.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="comment">$1</span>');
-    escaped = escaped.replace(/(&lt;\/?)(\w+)([\s\S]*?)(&gt;)/g, (match, p1, tagName, attrs, p4) => {
-      const highlightedAttrs = attrs.replace(/(\b[a-zA-Z0-9_-]+=)(?:&quot;([\s\S]*?)&quot;|&#39;([\s\S]*?)&#39;)/g, (m, name, valDouble, valSingle) => {
+    escaped = escaped.replace(/(&lt;\/?)(\w+)([\s\S]*?)(&gt;)/g, (match: string, p1: string, tagName: string, attrs: string, p4: string) => {
+      const highlightedAttrs = attrs.replace(/(\b[a-zA-Z0-9_-]+=)(?:&quot;([\s\S]*?)&quot;|&#39;([\s\S]*?)&#39;)/g, (m: string, name: string, valDouble: string | undefined, valSingle: string | undefined) => {
         const val = valDouble !== undefined ? `&quot;${valDouble}&quot;` : `&#39;${valSingle}&#39;`;
         return `<span class="attr">${name}</span><span class="string">${val}</span>`;
       });
@@ -1341,17 +1549,17 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
   };
 
   // Replace each raw XML tag in order. Attribute parsing accepts both quote styles.
-  html = html.replace(/<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>)/g, (match, attrsRaw) => {
+  html = html.replace(/<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>|>)/g, (match, attrsRaw) => {
     const path = parseXmlAttrs(attrsRaw).path || '.';
     return replaceTag(match, 'read_dir', `Просмотр папки: ${path}`, '');
   });
 
-  html = html.replace(/<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>)/g, (match, attrsRaw) => {
+  html = html.replace(/<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>|>)/g, (match, attrsRaw) => {
     const path = parseXmlAttrs(attrsRaw).path || '';
     return replaceTag(match, 'read_file', `Чтение файла: ${path}`, '');
   });
 
-  html = html.replace(/<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>)/g, (match, attrsRaw) => {
+  html = html.replace(/<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>|>)/g, (match, attrsRaw) => {
     const command = parseXmlAttrs(attrsRaw).command || '';
     return replaceTag(match, 'execute_command', `Запуск команды: ${command}`, '');
   });
@@ -1366,16 +1574,16 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
     return replaceTag(match, 'edit_file', `Правка файла: ${path}`, inner);
   });
 
-  html = html.replace(/<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>)/g, (match, attrsRaw) => {
+  html = html.replace(/<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>|>)/g, (match, attrsRaw) => {
     const query = parseXmlAttrs(attrsRaw).query || '';
     return replaceTag(match, 'search_code', `Поиск в коде: ${query}`, '');
   });
 
-  html = html.replace(/<list_components\s*(?:\/>|>\s*<\/list_components>)/g, (match) => {
+  html = html.replace(/<list_components\s*(?:\/>|>\s*<\/list_components>|>)/g, (match) => {
     return replaceTag(match, 'list_components', `Список компонентов проекта`, '');
   });
 
-  html = html.replace(/<check_image_size\b([^>]*)\s*(?:\/>|>\s*<\/check_image_size>)/g, (match, attrsRaw) => {
+  html = html.replace(/<check_image_size\b([^>]*)\s*(?:\/>|>\s*<\/check_image_size>|>)/g, (match, attrsRaw) => {
     const path = parseXmlAttrs(attrsRaw).path || '';
     return replaceTag(match, 'check_image_size', `Проверка изображения: ${path}`, '');
   });
@@ -1397,9 +1605,9 @@ function buildMsgActions(isAi: boolean): string {
   const copyBtn = `<button class="msg-action-btn copy" data-action="copy" title="${esc(t('Копировать'))}" aria-label="${esc(t('Копировать'))}"><i data-lucide="copy"></i></button>`;
   const branchBtn = `<button class="msg-action-btn branch" data-action="branch" title="${esc(t('Ветвиться от сюда'))}" aria-label="${esc(t('Ветвиться'))}"><i data-lucide="git-branch"></i></button>`;
   if (isAi) {
-    return `<div class="msg-actions">${copyBtn}${branchBtn}<button class="msg-action-btn regenerate" data-action="regenerate" title="${esc(t('Сгенерировать заново'))}" aria-label="${esc(t('Сгенерировать заново'))}"><i data-lucide="refresh-cw"></i></button></div>`;
+    return `${copyBtn}${branchBtn}<button class="msg-action-btn regenerate" data-action="regenerate" title="${esc(t('Сгенерировать заново'))}" aria-label="${esc(t('Сгенерировать заново'))}"><i data-lucide="refresh-cw"></i></button>`;
   }
-  return `<div class="msg-actions">${copyBtn}${branchBtn}<button class="msg-action-btn edit" data-action="edit" title="${esc(t('Редактировать сообщение'))}" aria-label="${esc(t('Редактировать'))}"><i data-lucide="pencil"></i></button></div>`;
+  return `${copyBtn}${branchBtn}<button class="msg-action-btn edit" data-action="edit" title="${esc(t('Редактировать сообщение'))}" aria-label="${esc(t('Редактировать'))}"><i data-lucide="pencil"></i></button>`;
 }
 
 // In-app confirmation modal (replaces the native system dialog)
@@ -1683,9 +1891,9 @@ async function runCodeSnippet(code: string, lang: string) {
   } catch (err: any) {
     appendBubble('7/24 IDE', `⚠️ ${t('Ошибка выполнения:')}\n\`\`\`\n${err.message || err}\n\`\`\``, true);
   } finally {
-    // Cleanup: remove temp file after execution
+    // Cleanup: remove temp file after execution (cross-platform, path-checked)
     try {
-      await window.electronAPI.executeCommand(`rm -f "${tmpFile}"`, activeProject.workspacePath);
+      await window.electronAPI.deleteFile(tmpFile, activeProject.workspacePath);
     } catch (_) {}
   }
 }
@@ -1751,43 +1959,19 @@ function renderChatHistory() {
 function addWelcomeMessage() {
   const isEmpty = chatMessages.children.length === 0;
   if (!isEmpty) return;
+
   const div = document.createElement('div');
-  div.className = 'chat-message ai welcome-message';
+  div.className = 'chat-message ai welcome-message lowcode-welcome-message';
+
   div.innerHTML = `
-    <div class="message-meta"><span class="sender-name">7/24 IDE</span><span class="time">${esc(t('сейчас'))}</span></div>
     <div class="message-text welcome-message-text">
-      <div class="welcome-greeting">${esc(t('Здравствуйте! Я — ИИ-агент 7/24 IDE.'))}</div>
-      <div class="welcome-steps-list">
-        <div class="welcome-step-item">
-          <span class="step-icon">1</span>
-          <div class="step-body">
-            <span class="step-title">${esc(t('Выберите рабочую папку'))}</span>
-            <span class="step-desc">${esc(t('Нажмите «Открыть» в боковой панели слева, чтобы выбрать папку проекта.'))}</span>
-          </div>
-        </div>
-        <div class="welcome-step-item">
-          <span class="step-icon">2</span>
-          <div class="step-body">
-            <span class="step-title">${esc(t('Добавьте API-ключ'))}</span>
-            <span class="step-desc">${esc(t('Нажмите «Настройки» и введите свой ключ OpenRouter для доступа к моделям.'))}</span>
-          </div>
-        </div>
-        <div class="welcome-step-item">
-          <span class="step-icon">3</span>
-          <div class="step-body">
-            <span class="step-title">${esc(t('Опишите задачу'))}</span>
-            <span class="step-desc">${esc(t('Напишите, что нужно создать — я прочитаю файлы, напишу код и покажу результат.'))}</span>
-          </div>
-        </div>
+      <div class="empty-chat-prompt">
+        <h1>${esc(t('Что хотите создать?'))}</h1>
       </div>
     </div>
   `;
+
   chatMessages.appendChild(div);
-  // Bind example chips
-  div.querySelectorAll('.example-chip').forEach(c => c.addEventListener('click', () => {
-    const p = (c as HTMLElement).dataset.prompt || '';
-    if (p) { chatInput.value = p; chatInput.dispatchEvent(new Event('input')); btnSend.click(); }
-  }));
 }
 
 // Show a "thinking" indicator while the model is processing
@@ -1827,12 +2011,14 @@ async function refreshWorkspaceFilesUI() {
   if (!activeProject || !activeProject.workspacePath) {
     filesWorkspacePath.textContent = t('Не выбрана');
     filesList.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted);">${t('Рабочая папка не выбрана. Нажмите «Открыть» в боковой панели.')}</div>`;
+    updateLowcodeContextCounts([]);
     return;
   }
 
   filesWorkspacePath.textContent = activeProject.workspacePath;
   try {
     const files = await window.electronAPI.readDir(activeProject.workspacePath);
+    updateLowcodeContextCounts(files);
     filesList.innerHTML = '';
 
     if (files.length === 0) {
@@ -1854,8 +2040,8 @@ async function refreshWorkspaceFilesUI() {
 
       item.innerHTML = `
         <i data-lucide="${icon}"></i>
-        <span class="file-item-name" title="${f.path}">${f.path}</span>
-        ${sizeStr ? `<span class="file-item-size">${sizeStr}</span>` : ''}
+        <span class="file-item-name" title="${esc(f.path)}">${esc(f.path)}</span>
+        ${sizeStr ? `<span class="file-item-size">${esc(sizeStr)}</span>` : ''}
         ${!f.isDir ? `<button class="file-item-attach-btn" title="Прикрепить к контексту"><i data-lucide="${attachedFiles.has(f.path) ? 'check' : 'plus'}"></i></button>` : ''}
         ${!f.isDir ? `<button class="file-item-pin-btn" title="${(activeProject?.pinnedFiles || []).includes(f.path) ? 'Открепить' : 'Закрепить в контексте'}"><i data-lucide="${(activeProject?.pinnedFiles || []).includes(f.path) ? 'pin-off' : 'pin'}"></i></button>` : ''}
       `;
@@ -1905,7 +2091,7 @@ async function refreshWorkspaceFilesUI() {
             filesView.style.display = 'none';
             codeView.style.display = 'flex';
           } catch (err: any) {
-            alert(`Не удалось открыть файл: ${err.message}`);
+            alert(`${t('Не удалось открыть файл')}: ${err.message}`);
           }
         });
       }
@@ -1914,8 +2100,31 @@ async function refreshWorkspaceFilesUI() {
     }
     refreshIcons();
   } catch (err: any) {
-    filesList.innerHTML = `<div style="padding:20px; text-align:center; color:var(--accent-red);">Ошибка чтения директории: ${err.message}</div>`;
+    updateLowcodeContextCounts([]);
+    filesList.innerHTML = `<div style="padding:20px; text-align:center; color:var(--accent-red);">${esc('Ошибка чтения директории')}: ${esc(err.message || String(err))}</div>`;
   }
+}
+
+function updateLowcodeContextCounts(files: { path: string; isDir: boolean; size: number }[]) {
+  const visibleFiles = files.filter(f => !f.path.startsWith('.shadow-workspace/') && f.path !== '.shadow-workspace');
+  const realFiles = visibleFiles.filter(f => !f.isDir);
+  const pages = realFiles.filter(f => /\.(html|tsx|jsx|vue|svelte)$/i.test(f.path) || /(^|\/)(pages|routes|views)\//i.test(f.path)).length;
+  const api = realFiles.filter(f => /(^|\/)(api|routes|controllers|services)\//i.test(f.path) || /\.(controller|route|routes|service)\.(ts|js)$/i.test(f.path)).length;
+  const db = realFiles.filter(f => /(schema\.prisma|database|db\.|model\.|models\/|migrations\/|\.sql$|\.sqlite$)/i.test(f.path)).length;
+  const env = realFiles.filter(f => /(^|\/)\.env(\.|$)|env\./i.test(f.path)).length;
+
+  const setText = (id: string, value: number | string) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value);
+  };
+  setText('lowcode-context-files', realFiles.length);
+  setText('lowcode-context-pages', pages);
+  setText('lowcode-context-api', api);
+  setText('lowcode-context-db', db);
+  setText('lowcode-context-files-detail', realFiles.length);
+  setText('lowcode-context-data-detail', db);
+  setText('lowcode-context-integrations-detail', api);
+  setText('lowcode-context-env-detail', env);
 }
 
 // Inject a Content Security Policy meta tag into the previewed HTML so the
@@ -1987,6 +2196,7 @@ function renderTasksUI() {
     if (fill) fill.style.width = '0%';
     if (label) label.textContent = '';
     refreshIcons();
+    updatePlanProgressBar();
     return;
   }
 
@@ -2011,6 +2221,7 @@ function renderTasksUI() {
     list.appendChild(row);
   });
   refreshIcons();
+  updatePlanProgressBar();
 }
 
 // Unified Preview panel and Tab Visibility state manager
@@ -2042,7 +2253,6 @@ function renderPreview() {
   if (tasksViewEl && activeTab !== 'tasks') {
     tasksViewEl.style.display = 'none';
   }
-
   if (!activeProject) {
     welcomeState.style.display = 'flex';
     if (welcomeFolderPrompt) welcomeFolderPrompt.style.display = 'block';
@@ -2416,7 +2626,7 @@ function renderPlanWidgetInChat(steps: string[]) {
   btnStart?.addEventListener('click', () => {
     const activeSteps = planSteps.filter(s => s.enabled);
     if (activeSteps.length === 0) {
-      alert('Пожалуйста, выберите хотя бы один шаг для сборки!');
+      alert(t('Пожалуйста, выберите хотя бы один шаг для сборки!'));
       return;
     }
 
@@ -2467,6 +2677,7 @@ function renderPlanWidgetInChat(steps: string[]) {
 
 // Loop to execute next step in plan
 async function executeNextStep(planId: string) {
+  if (!isExecutingPlan) return;
   const nextIdx = planSteps.findIndex((s) => s.enabled && s.status === 'pending');
 
   // Auto-snapshot before first step execution
@@ -2674,8 +2885,11 @@ async function markStepCompleted(planId: string, idx: number) {
     }
   }
   
-  setTimeout(() => {
-    executeNextStep(planId);
+  if (nextStepTimer !== null) clearTimeout(nextStepTimer);
+  nextStepTimer = setTimeout(() => {
+    nextStepTimer = null;
+    // The user might have hit Stop or switched projects in this 1s gap.
+    if (isExecutingPlan) executeNextStep(planId);
   }, 1000);
 }
 
@@ -2709,7 +2923,7 @@ function translateErrorMessage(msg: string): string {
   return 'Неизвестная системная ошибка или сбой компиляции при сборке.';
 }
 
-function showSelfHealingErrorCard(planId: string, command: string, errorMessage: string): Promise<void> {
+function showSelfHealingErrorCard(planId: string, command: string, errorMessage: string): Promise<'heal' | 'rebuild'> {
   return new Promise((resolve) => {
     const statusIcon = document.getElementById(`status-icon-${planId}-${currentStepIndex}`);
     if (statusIcon) {
@@ -2764,19 +2978,31 @@ function showSelfHealingErrorCard(planId: string, command: string, errorMessage:
     
     div.querySelector('.btn-heal-error')?.addEventListener('click', () => {
       div.remove();
-      
+
+      // Restore the step from "failed" back to "active" so the UI doesn't
+      // show a red icon while we retry. The micro-agent loop already has
+      // the failed command's result in its history and will pick it up.
+      if (planSteps[currentStepIndex]) {
+        planSteps[currentStepIndex].status = 'active';
+        savePlanSteps();
+        renderTasksUI();
+      }
       const statusIcon = document.getElementById(`status-icon-${planId}-${currentStepIndex}`);
       if (statusIcon) {
         statusIcon.className = 'plan-step-status-icon active';
         statusIcon.innerHTML = '<i data-lucide="loader-2"></i>';
         refreshIcons();
       }
-      
-      const fixPrompt = `Произошла ошибка при выполнении команды "${command}":\n${errorMessage}\nПожалуйста, исправь эту ошибку и повтори попытку.`;
-      activeProject!.chatHistory.push({ role: 'user', content: fixPrompt });
+
+      // Push the explicit fix-prompt as a HINT for the next agent turn. It
+      // lands in the project history (and consequently in the fitted context
+      // of the next runAgentStep / micro-agent) so the model knows the user
+      // explicitly asked to retry.
+      const fixPrompt = `Произошла ошибка при выполнении команды "${command}":\n${errorMessage}\n\nИсправь файлы кода (используя <edit_file> или <write_file>), чтобы команда прошла успешно, затем повтори её.`;
+      activeProject?.chatHistory.push({ role: 'user', content: fixPrompt });
       saveProjects();
-      
-      resolve();
+
+      resolve('heal');
     });
 
     div.querySelector('.btn-rebuild-plan')?.addEventListener('click', () => {
@@ -2784,7 +3010,7 @@ function showSelfHealingErrorCard(planId: string, command: string, errorMessage:
       planSteps[currentStepIndex].status = 'failed';
       savePlanSteps();
       rebuildPlan(planId);
-      resolve();
+      resolve('rebuild');
     });
   });
 }
@@ -2873,6 +3099,7 @@ function updateTokenStats(promptToks: number, completionToks: number) {
   lastRequestTokens = { prompt: promptToks, completion: completionToks };
   saveTokenAccumulated();
   updateContextBar();
+  setTokenIndicator(promptToks, completionToks);
 }
 
 function estimateCost(promptToks: number, completionToks: number): number {
@@ -3032,14 +3259,14 @@ function parseTools(text: string): AgentTool[] {
   let match;
 
   // 1. Read dir
-  const rawReadDir = /<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>)/g;
+  const rawReadDir = /<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>|>)/g;
   while ((match = rawReadDir.exec(text)) !== null) {
     const attrs = parseXmlAttrs(match[1]);
     if (attrs.path) tools.push({ type: 'read_dir', params: { path: attrs.path }, rawTag: match[0] });
   }
 
   // 2. Read file
-  const rawReadFile = /<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>)/g;
+  const rawReadFile = /<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>|>)/g;
   while ((match = rawReadFile.exec(text)) !== null) {
     const attrs = parseXmlAttrs(match[1]);
     if (attrs.path) {
@@ -3078,7 +3305,7 @@ function parseTools(text: string): AgentTool[] {
   }
 
   // 5. Execute command
-  const rawExecCmd = /<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>)/g;
+  const rawExecCmd = /<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>|>)/g;
   while ((match = rawExecCmd.exec(text)) !== null) {
     const attrs = parseXmlAttrs(match[1]);
     if (attrs.command) tools.push({ type: 'execute_command', params: { command: attrs.command }, rawTag: match[0] });
@@ -3098,7 +3325,7 @@ function parseTools(text: string): AgentTool[] {
   }
 
   // 8. Search code (lightweight codebase search)
-  const rawSearchCode = /<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>)/g;
+  const rawSearchCode = /<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>|>)/g;
   while ((match = rawSearchCode.exec(text)) !== null) {
     const attrs = parseXmlAttrs(match[1]);
     if (attrs.query) tools.push({ type: 'search_code', params: { query: attrs.query }, rawTag: match[0] });
@@ -3123,7 +3350,7 @@ function parseTools(text: string): AgentTool[] {
 function setGeneratingState(generating: boolean) {
   isGenerating = generating;
   btnSend.disabled = generating || chatInput.value.trim().length === 0;
-  
+
   const btnStop = document.getElementById('btn-stop-generation');
   if (btnStop) {
     btnStop.classList.toggle('hidden', !generating);
@@ -3131,37 +3358,116 @@ function setGeneratingState(generating: boolean) {
 
   const ghostUi = document.getElementById('ghost-ui-overlay');
   if (ghostUi) {
-    // Ghost skeleton disabled — it caused flicker. The preview now updates in place,
-    // reloading only when the HTML content actually changes.
     ghostUi.classList.add('hidden');
   }
-  
-  const genIndicator = document.getElementById('chat-gen-indicator');
-  if (genIndicator) {
-    if (generating && settings.showLoading) {
-      genIndicator.classList.remove('hidden');
-    } else {
-      genIndicator.classList.add('hidden');
-    }
-  }
-  
+
+  // Modern activity bar replaces the old "Generating..." pill + current-action.
+  // Honour the "show generation indicator" setting (settings.showLoading).
+  const activityBar = document.getElementById('agent-activity-bar');
+  if (activityBar) activityBar.classList.toggle('hidden', !(generating && settings.showLoading !== false));
+
   if (!generating) {
-    hideActiveOp();
     removeThinking();
     setCurrentAction('');
+    setActivityTool('');
+    // Counters are sticky for one cycle — they reset before the next request
+    // (see resetActivityCounters() below). We don't reset them here, so the
+    // user can see "8 files changed" even after generation finishes.
+    updatePlanProgressBar();
+  } else {
+    updatePlanProgressBar();
   }
 }
 
 function setCurrentAction(text: string) {
-  const el = document.getElementById('current-action');
-  const textEl = document.getElementById('current-action-text');
-  if (!el || !textEl) return;
-  if (text) {
-    textEl.textContent = text;
-    el.classList.remove('hidden');
+  // New: drives the activity-bar caption. Old DOM nodes are kept hidden via CSS
+  // for backwards compatibility but no longer reflect anything.
+  const aabText = document.getElementById('aab-text');
+  if (aabText) {
+    aabText.textContent = text || (isGenerating ? t('Подготовка...') : '');
+  }
+}
+
+function setActivityTool(line: string) {
+  const el = document.getElementById('aab-tool');
+  if (!el) return;
+  el.textContent = line || '';
+}
+
+// ─── Activity counters: files touched + tokens of last request ──
+const touchedFilesThisRun = new Set<string>();
+
+function noteFileTouched(filePath: string) {
+  if (!filePath) return;
+  touchedFilesThisRun.add(filePath);
+  const counter = document.getElementById('aab-files');
+  const num = document.getElementById('aab-files-n');
+  if (counter && num) {
+    counter.classList.remove('hidden');
+    num.textContent = String(touchedFilesThisRun.size);
+  }
+}
+
+function resetActivityCounters() {
+  touchedFilesThisRun.clear();
+  const fc = document.getElementById('aab-files');
+  if (fc) fc.classList.add('hidden');
+  const tc = document.getElementById('aab-tokens');
+  if (tc) tc.classList.add('hidden');
+}
+
+function setTokenIndicator(prompt: number, completion: number) {
+  const counter = document.getElementById('aab-tokens');
+  const num = document.getElementById('aab-tokens-n');
+  if (!counter || !num) return;
+  const total = (prompt || 0) + (completion || 0);
+  if (total <= 0) return;
+  counter.classList.remove('hidden');
+  num.textContent = total >= 1000 ? `${(total / 1000).toFixed(1)}K` : String(total);
+}
+
+// ─── Sticky plan-progress bar above the chat ──
+function updatePlanProgressBar() {
+  const bar = document.getElementById('plan-progress-bar');
+  const titleEl = document.getElementById('ppb-title');
+  const countsEl = document.getElementById('ppb-counts');
+  const fillEl = document.getElementById('ppb-fill');
+  const currentEl = document.getElementById('ppb-current');
+  if (!bar || !titleEl || !countsEl || !fillEl || !currentEl) return;
+
+  // Hide unless there's an actual plan being built (or just finished).
+  const enabled = planSteps.filter(s => s.enabled);
+  const hasPlan = enabled.length > 0 && (isExecutingPlan || planApproved || enabled.some(s => s.status === 'done' || s.status === 'active' || s.status === 'failed'));
+  if (!hasPlan) {
+    bar.classList.add('hidden');
+    return;
+  }
+
+  bar.classList.remove('hidden');
+
+  const total = enabled.length;
+  const done = enabled.filter(s => s.status === 'done').length;
+  const failed = enabled.find(s => s.status === 'failed');
+  const active = enabled.find(s => s.status === 'active');
+
+  countsEl.textContent = `${done}/${total}`;
+
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  fillEl.style.width = `${pct}%`;
+
+  if (failed) {
+    titleEl.textContent = t('Ошибка на шаге') + ' ' + (planSteps.indexOf(failed) + 1);
+    currentEl.textContent = failed.text;
+  } else if (active) {
+    titleEl.textContent = `${t('Шаг')} ${planSteps.indexOf(active) + 1}: ${t('идёт сборка')}`;
+    currentEl.textContent = active.text;
+  } else if (done === total) {
+    titleEl.textContent = t('План завершён');
+    currentEl.textContent = '';
   } else {
-    el.classList.add('hidden');
-    textEl.textContent = '';
+    titleEl.textContent = t('Выполнение плана');
+    const next = enabled.find(s => s.status === 'pending');
+    currentEl.textContent = next ? next.text : '';
   }
 }
 
@@ -3176,6 +3482,21 @@ function applyTheme() {
     if (darkMatches) {
       document.body.classList.add('theme-dark');
     }
+  }
+}
+
+// Re-apply the theme live when the OS scheme changes (only matters for "system").
+let _systemThemeListenerAttached = false;
+function setupSystemThemeListener() {
+  if (_systemThemeListenerAttached) return;
+  _systemThemeListenerAttached = true;
+  try {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', () => {
+      if ((settings.theme || 'light') === 'system') applyTheme();
+    });
+  } catch {
+    /* matchMedia change events unsupported — non-fatal */
   }
 }
 
@@ -3312,6 +3633,7 @@ async function handleUserMessage(text: string) {
   appendBubble('Вы', text, false);
   autoScrollEnabled = true;
   buildSessionWroteFiles = false;
+  resetActivityCounters();
   chatMessages.scrollTop = chatMessages.scrollHeight;
 
   // Read attached files context
@@ -3545,11 +3867,11 @@ async function runAgentStep() {
     showThinking();
     
     if (appMode === 'plan' && !planApproved) {
-      setCurrentAction('🧠 Планирование...');
+      setCurrentAction(t('🧠 Планирование...'));
     } else if (isExecutingPlan && currentStepIndex >= 0) {
-      setCurrentAction(`📋 Шаг ${currentStepIndex + 1}: ${planSteps[currentStepIndex]?.text || ''}`);
+      setCurrentAction(`📋 ${t('Шаг')} ${currentStepIndex + 1}: ${planSteps[currentStepIndex]?.text || ''}`);
     } else {
-      setCurrentAction('🔧 Выполнение задачи...');
+      setCurrentAction(t('🔧 Выполнение задачи...'));
     }
 
     // Detect dynamic skills
@@ -3640,9 +3962,15 @@ async function runAgentStep() {
     if (result.usage) {
       updateTokenStats(result.usage.prompt_tokens || 0, result.usage.completion_tokens || 0);
     }
-    
+
+    // Guard against the user deleting/switching the project mid-generation.
+    if (!activeProject) {
+      setGeneratingState(false);
+      return;
+    }
+
     // Log assistant reply
-    activeProject!.chatHistory.push({
+    activeProject.chatHistory.push({
       role: 'assistant',
       content: result.content,
       reasoningContent: result.reasoningContent,
@@ -3674,9 +4002,6 @@ async function runAgentStep() {
               bubbles[bubbles.length - 1].remove();
             }
             renderPlanWidgetInChat(steps);
-            
-            // Run Critic Agent check in the background
-            runPlanCritic(lastUserMsg, steps);
           }
         }
       } else if (isExecutingPlan && currentStepIndex !== -1) {
@@ -3790,7 +4115,11 @@ async function executeToolsSequentially(tools: AgentTool[]) {
   updateLivePreviewFromFiles();
 
   const systemResultText = results.join('\n\n');
-  activeProject!.chatHistory.push({ role: 'system', content: `[Результат выполнения инструментов]\n${systemResultText}` });
+  if (!activeProject) {
+    setGeneratingState(false);
+    return;
+  }
+  activeProject.chatHistory.push({ role: 'system', content: `[Результат выполнения инструментов]\n${systemResultText}` });
   saveProjects();
 
   runAgentStep();
@@ -3806,6 +4135,11 @@ async function streamChatCompletionWithFallback(messages: any[]) {
     return await streamChatCompletion(messages, primary, settings.apiKey);
   } catch (err: any) {
     if (err?.message === 'Генерация прервана.') throw err;
+    // Auth errors are not transient — switching to a different model on the
+    // same provider with the same broken key would just fail again. Surface
+    // the error to the user instead of swallowing it via fallback.
+    const msg = String(err?.message || '');
+    if (/401|unauthorized|403/i.test(msg)) throw err;
     const fb = settings.fallbackModel;
     if (!fb || fb === primary) throw err;
     appendBubble('Система', `⚠️ ${primary}: ${err.message}. ${t('Переключаюсь на резервную модель')} → ${fb}`, true);
@@ -3814,7 +4148,7 @@ async function streamChatCompletionWithFallback(messages: any[]) {
 }
 
 async function streamChatCompletion(messages: any[], model: string, apiKey: string) {
-  setCurrentAction('🧠 Генерация ответа...');
+  setCurrentAction(t('🧠 Генерация ответа...'));
   removeThinking();
   const modelLabel = settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
   const bubble = document.createElement('div');
@@ -3895,7 +4229,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         { role: 'assistant', content: fullContent },
         { role: 'user', content: '[Предыдущий ответ был прерван на полуслове. Продолжи ровно с того места, где он остановился. Начни сразу с продолжения текста, без лишних вступлений или повторений!]' }
       ];
-      setCurrentAction('⏳ Продолжение генерации...');
+      setCurrentAction(t('⏳ Продолжение генерации...'));
     }
 
     const abortController = createAbortController();
@@ -3927,10 +4261,14 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         if (continueAttempts === 0) bubble.remove();
         const errorBody = await resp.text().catch(() => '');
         let errorMsg = `HTTP ${resp.status}`;
-        try {
-          const parsed = JSON.parse(errorBody);
-          errorMsg = parsed.error?.message || errorMsg;
-        } catch {}
+        if (resp.status === 401) {
+          errorMsg = `${t('Неверный или устаревший API-ключ')} (401 Unauthorized). ${t('Пожалуйста, проверьте ключ в Настройках → Провайдер')}.`;
+        } else {
+          try {
+            const parsed = JSON.parse(errorBody);
+            errorMsg = parsed.error?.message || errorMsg;
+          } catch {}
+        }
         throw new Error(errorMsg);
       }
 
@@ -4193,17 +4531,6 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     return normalized === scope || normalized.startsWith(scope + '/');
   };
 
-  const appendLog = (msg: string) => {
-    // Find logs element in current micro-agent bubble if active
-    const logsEl = document.querySelector('.micro-agent-message:last-child .micro-agent-logs');
-    if (logsEl) {
-      const d = document.createElement('div');
-      d.textContent = msg;
-      logsEl.appendChild(d);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-  };
-
   if (tool.type === 'read_dir') {
     if (settings.permRead === 'ask') {
       const allowed = await requestPermission('read', `Просмотр содержимого папки: "${tool.params.path}"`);
@@ -4269,6 +4596,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
     await window.electronAPI.writeFile(mapPath(tool.params.path), tool.params.content, activeWorkspace, settings.sandboxEnabled);
     buildSessionWroteFiles = true;
+    noteFileTouched(tool.params.path);
     return 'Успешно записано на диск.';
   }
 
@@ -4382,6 +4710,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
     await window.electronAPI.writeFile(mapPath(tool.params.path), newContent, activeWorkspace, settings.sandboxEnabled);
     buildSessionWroteFiles = true;
+    noteFileTouched(tool.params.path);
     return 'Изменения успешно применены к файлу.';
   }
 
@@ -4395,15 +4724,55 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       if (!allowed) return 'Выполнение команды отклонено пользователем.';
     }
 
-    const sysBubble = document.createElement('div');
-    sysBubble.className = 'chat-message ai';
-    sysBubble.innerHTML = `<div class="message-meta"><span class="sender-name">Система</span></div><div class="message-text">⏳ Запуск команды: <code>${esc(tool.params.command)}</code> — вывод в реальном времени на вкладке <b>Терминал</b>.</div>`;
-    chatMessages.appendChild(sysBubble);
+    // Render an inline shell-exec card that streams the live output and
+    // then collapses into a clickable summary. Unlike the previous bubble
+    // it is NOT removed when the command finishes — the user can re-open
+    // the output later from chat history.
+    const cardId = `shell-card-${genId()}`;
+    const card = document.createElement('div');
+    card.className = 'chat-message ai';
+    card.id = cardId;
+    card.innerHTML = `
+      <div class="message-meta"><span class="sender-name">${esc(t('Команда'))}</span></div>
+      <div class="message-text">
+        <div class="shell-exec-card running">
+          <div class="shell-exec-row">
+            <span class="shell-exec-status">${esc(t('выполняется'))}…</span>
+            <span class="shell-exec-cmd">${esc(tool.params.command)}</span>
+            <button type="button" class="shell-exec-toggle" data-action="toggle">${esc(t('Показать вывод'))}</button>
+          </div>
+          <pre class="shell-exec-output"></pre>
+        </div>
+      </div>
+    `;
+    chatMessages.appendChild(card);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    refreshIcons();
+
+    const cardEl = card.querySelector('.shell-exec-card') as HTMLElement;
+    const statusEl = card.querySelector('.shell-exec-status') as HTMLElement;
+    const outputEl = card.querySelector('.shell-exec-output') as HTMLElement;
+    const toggleBtn = card.querySelector('.shell-exec-toggle') as HTMLButtonElement | null;
+    toggleBtn?.addEventListener('click', () => {
+      cardEl.classList.toggle('expanded');
+      toggleBtn.textContent = cardEl.classList.contains('expanded') ? t('Скрыть вывод') : t('Показать вывод');
+    });
 
     const execId = genId();
     activeCommandExecId = execId;
-    
+
+    // Live-stream chunks straight into the card while the command runs.
+    const unsubscribe = window.electronAPI.onCommandChunk?.(({ execId: eid, chunk }) => {
+      if (eid !== execId) return;
+      outputEl.textContent = (outputEl.textContent || '') + chunk;
+      // Keep the output panel auto-scrolled if the user has it open.
+      if (cardEl.classList.contains('expanded')) {
+        outputEl.scrollTop = outputEl.scrollHeight;
+      }
+    });
+
+    setActivityTool(`$ ${tool.params.command}`);
+
     // Toggle terminal input bar visibility
     const inputBar = document.getElementById('terminal-input-bar');
     const stdinInput = document.getElementById('terminal-stdin-input') as HTMLInputElement;
@@ -4419,16 +4788,40 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
     const res = await window.electronAPI.executeCommandStream(tool.params.command, activeWorkspace, execId);
     setTerminalStatus(res.code === 0 ? '✓ завершено' : `✗ код ${res.code}`);
-    sysBubble.remove();
+
+    // Detach the live stream listener to avoid leaks.
+    if (typeof unsubscribe === 'function') {
+      try { unsubscribe(); } catch {}
+    }
+
+    // Finalise the card with the exit code + the full captured stdout/stderr.
+    cardEl.classList.remove('running');
+    cardEl.classList.add(res.code === 0 ? 'success' : 'failed');
+    statusEl.textContent = res.code === 0 ? `✓ ${t('успех')}` : `✗ ${t('ошибка')} (${res.code})`;
+    const finalOut = (res.stdout || '') + (res.stderr ? `\n${res.stderr}` : '');
+    if (finalOut.trim()) {
+      outputEl.textContent = finalOut;
+    } else if (!(outputEl.textContent || '').trim()) {
+      outputEl.textContent = `(${t('нет вывода')})`;
+    }
 
     if (killBtn) killBtn.classList.add('hidden');
     if (inputBar) inputBar.style.display = 'none';
     activeCommandExecId = null;
+    setActivityTool('');
 
     // Pause build and show error recovery prompt if command failed during plan execution
     if (res.code !== 0 && isExecutingPlan) {
       const planId = (document.querySelector('.plan-widget') as HTMLElement)?.id?.replace('plan-widget-', '') || '';
-      await showSelfHealingErrorCard(planId, tool.params.command, res.stderr || res.stdout || 'Неизвестная ошибка выполнения команды');
+      const choice = await showSelfHealingErrorCard(planId, tool.params.command, res.stderr || res.stdout || 'Неизвестная ошибка выполнения команды');
+      if (choice === 'rebuild') {
+        // Plan is being rebuilt — abort this step's tool result so the agent
+        // doesn't try to "continue" on a stale plan.
+        return `Команда не выполнена (код ${res.code}). Пользователь запросил пересборку плана. Остановись и дождись новых инструкций.`;
+      }
+      // 'heal' — let the result fall through, but tag it so the agent's
+      // next turn understands that a retry was explicitly requested.
+      return `Код завершения: ${res.code}\nStdout:\n${res.stdout}\nStderr:\n${res.stderr}\n\n[Пользователь нажал «Исправить автоматически» — исправь файлы кода и повтори команду.]`;
     }
 
     return `Код завершения: ${res.code}\nStdout:\n${res.stdout}\nStderr:\n${res.stderr}`;
@@ -4462,6 +4855,35 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
   if (tool.type === 'search_code') {
     const query = String(tool.params.query || '').trim();
     if (!query) return 'Ошибка: пустой поисковый запрос.';
+
+    // Try the native Rust BM25 engine first. If it's been indexed, results
+    // come back instantly with proper relevance ranking.
+    try {
+      const status = window.electronAPI?.coreStatus
+        ? await window.electronAPI.coreStatus()
+        : null;
+      if (status?.available && status.docs && status.docs > 0 && window.electronAPI?.coreSearchRag) {
+        const native = await window.electronAPI.coreSearchRag(query, 20);
+        if (native && Array.isArray(native.results) && native.results.length > 0) {
+          let hits = native.results;
+          if (scopePath) {
+            const scope = scopePath.replace(/\\/g, '/').replace(/\/$/, '');
+            hits = hits.filter(h => h.file_path === scope || h.file_path.startsWith(scope + '/'));
+          }
+          if (hits.length > 0) {
+            const out = hits.map(h => {
+              const snippet = h.chunk_content.split('\n').slice(0, 3).join('\n').slice(0, 320);
+              return `${h.file_path}:${h.line_start}-${h.line_end} (score=${h.score.toFixed(2)}):\n${snippet}`;
+            }).join('\n---\n');
+            return `[native BM25] Найдено: ${hits.length}\n${out}`;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[search_code] native engine path failed, falling back to TS scan:', err);
+    }
+
+    // ── TS fallback: linear keyword scan over text files in the workspace ──
     try {
       let files = await window.electronAPI.readDir(activeWorkspace);
       if (scopePath) {
@@ -4722,23 +5144,30 @@ function requestWritePermissionWithDiff(filePath: string, oldContent: string, ne
       btnApprove.removeEventListener('click', handleApprove);
       btnReject.removeEventListener('click', handleReject);
       btnClose.removeEventListener('click', handleReject);
+      modal.removeEventListener('click', handleBackdrop);
     };
-    
+
     const handleApprove = () => {
       cleanup();
       appendBubble('Вы', `${t('Приняты изменения в файле')}: ${filePath}`, false);
       resolve(true);
     };
-    
+
     const handleReject = () => {
       cleanup();
       appendBubble('Вы', `${t('Отклонены изменения в файле')}: ${filePath}`, false);
       resolve(false);
     };
-    
+
+    // Clicking the dimmed backdrop (outside the dialog) rejects the change.
+    const handleBackdrop = (e: MouseEvent) => {
+      if (e.target === modal) handleReject();
+    };
+
     btnApprove.addEventListener('click', handleApprove);
     btnReject.addEventListener('click', handleReject);
     btnClose.addEventListener('click', handleReject);
+    modal.addEventListener('click', handleBackdrop);
   });
 }
 
@@ -4811,7 +5240,7 @@ btnSidebarSelectFolder.addEventListener('click', async () => {
       await setWorkspaceFolder(folder);
     }
   } catch (err: any) {
-    alert(`Ошибка выбора папки: ${err.message}`);
+    alert(`${t('Ошибка выбора папки: ')}${err.message}`);
   }
 });
 
@@ -4849,6 +5278,258 @@ btnRefreshFiles.addEventListener('click', () => {
 btnSidebarNewChat.addEventListener('click', () => {
   const p = createProject();
   switchToProject(p);
+});
+document.getElementById('btn-agentic-new-chat-mini')?.addEventListener('click', () => {
+  btnSidebarNewChat.click();
+});
+document.getElementById('agentic-chat-title')?.addEventListener('click', () => {
+  document.getElementById('btn-rename-active-project')?.click();
+});
+document.getElementById('btn-chat-attach-context')?.addEventListener('click', () => {
+  btnSidebarSelectFolder.click();
+});
+document.getElementById('btn-chat-focus-search')?.addEventListener('click', () => {
+  const bar = document.getElementById('chat-search-bar');
+  const input = document.getElementById('chat-search-input') as HTMLInputElement | null;
+  bar?.classList.remove('hidden');
+  input?.focus();
+  input?.select();
+});
+document.getElementById('btn-lowcode-context-expand')?.addEventListener('click', () => {
+  document.querySelector('.preview-panel')?.classList.toggle('show-advanced-tools');
+});
+document.getElementById('btn-lowcode-context-refresh')?.addEventListener('click', () => {
+  refreshWorkspaceFilesUI();
+});
+
+function initCustomModelDropdown() {
+  const slot = document.getElementById('agentic-topbar-model-slot');
+  const dropdown = document.getElementById('custom-model-dropdown');
+  const searchInput = document.getElementById('custom-model-search') as HTMLInputElement | null;
+  const listContainer = document.getElementById('custom-model-list');
+  const chatModelSelect = document.getElementById('chat-model-select') as HTMLSelectElement | null;
+
+  if (!slot || !dropdown || !listContainer) return;
+
+  slot.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('#custom-model-dropdown')) {
+      return;
+    }
+    dropdown.classList.toggle('hidden');
+    if (!dropdown.classList.contains('hidden')) {
+      renderCustomModelItems('');
+      if (searchInput) {
+        searchInput.value = '';
+        searchInput.focus();
+      }
+    }
+  });
+
+  searchInput?.addEventListener('input', () => {
+    renderCustomModelItems(searchInput.value.toLowerCase().trim());
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!slot.contains(e.target as Node)) {
+      dropdown.classList.add('hidden');
+    }
+  });
+
+  function renderCustomModelItems(query: string) {
+    listContainer!.innerHTML = '';
+    
+    let filteredModels = settings.cachedModels;
+    if (query) {
+      filteredModels = filteredModels.filter(m => 
+        (m.name || m.id).toLowerCase().includes(query) || 
+        m.id.toLowerCase().includes(query)
+      );
+    }
+
+    if (filteredModels.length === 0) {
+      const emptyItem = document.createElement('div');
+      emptyItem.className = 'custom-model-item';
+      emptyItem.style.color = 'var(--text-muted)';
+      emptyItem.style.cursor = 'default';
+      emptyItem.textContent = t('Модели не найдены');
+      listContainer!.appendChild(emptyItem);
+      return;
+    }
+
+    for (const m of filteredModels) {
+      const item = document.createElement('div');
+      item.className = 'custom-model-item' + (m.id === settings.model ? ' active' : '');
+      item.dataset.id = m.id;
+
+      const cleanName = (m.name || m.id).split(' · ')[0];
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'custom-model-item-name';
+      nameSpan.textContent = cleanName;
+      item.appendChild(nameSpan);
+
+      const badgesContainer = document.createElement('div');
+      badgesContainer.style.display = 'flex';
+      badgesContainer.style.alignItems = 'center';
+      badgesContainer.style.gap = '4px';
+
+      if (m.isFree) {
+        const freeBadge = document.createElement('span');
+        freeBadge.className = 'custom-model-item-badge';
+        freeBadge.textContent = 'FREE';
+        badgesContainer.appendChild(freeBadge);
+      }
+      if (m.contextLength) {
+        const ctxBadge = document.createElement('span');
+        ctxBadge.className = 'custom-model-item-badge';
+        ctxBadge.textContent = `${(m.contextLength / 1000).toFixed(0)}K`;
+        badgesContainer.appendChild(ctxBadge);
+      }
+
+      if (badgesContainer.children.length > 0) {
+        item.appendChild(badgesContainer);
+      }
+
+      item.addEventListener('click', () => {
+        settings.model = m.id;
+        saveSettings();
+        
+        if (chatModelSelect) {
+          chatModelSelect.value = m.id;
+          chatModelSelect.dispatchEvent(new Event('change'));
+        }
+        
+        updateModelLabel();
+        dropdown.classList.add('hidden');
+      });
+
+      listContainer!.appendChild(item);
+    }
+  }
+
+  updateModelLabel();
+}
+
+function initCustomFiltersDropdown() {
+  const btn = document.getElementById('btn-chat-more-actions');
+  const dropdown = document.getElementById('custom-filters-dropdown');
+  const scopeInput = document.getElementById('topbar-scope-input') as HTMLInputElement | null;
+
+  if (!btn || !dropdown) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle('hidden');
+    if (!dropdown.classList.contains('hidden')) {
+      if (scopeInput && activeProject) {
+        scopeInput.value = activeProject.scopePath || '';
+        scopeInput.focus();
+      }
+    }
+  });
+
+  dropdown.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  document.addEventListener('click', () => {
+    dropdown.classList.add('hidden');
+  });
+
+  scopeInput?.addEventListener('input', () => {
+    if (!activeProject) return;
+    activeProject.scopePath = scopeInput.value.trim();
+    saveProjects();
+    updateFilterButtonUI();
+    
+    const sidebarScopeInput = document.getElementById('sidebar-scope-input') as HTMLInputElement | null;
+    if (sidebarScopeInput) {
+      sidebarScopeInput.value = activeProject.scopePath;
+    }
+  });
+}
+
+function updateFilterButtonUI() {
+  const btn = document.getElementById('btn-chat-more-actions');
+  if (!btn) return;
+  if (activeProject && activeProject.scopePath) {
+    btn.classList.add('filter-active');
+  } else {
+    btn.classList.remove('filter-active');
+  }
+}
+
+function updateLowcodeContextPlaceholder() {
+  const placeholder = document.getElementById('lowcode-context-placeholder');
+  const content = document.getElementById('lowcode-context-content');
+  const expandBtn = document.getElementById('btn-lowcode-context-expand');
+  
+  const hasPath = !!(activeProject && activeProject.workspacePath);
+  
+  if (placeholder) placeholder.classList.toggle('hidden', hasPath);
+  if (content) content.classList.toggle('hidden', !hasPath);
+  if (expandBtn) expandBtn.classList.toggle('hidden', !hasPath);
+}
+
+function initLowcodeContextPanelClicks() {
+  const panel = document.querySelector('.lowcode-context-panel');
+  if (!panel) return;
+
+  const expandBtn = document.getElementById('btn-lowcode-context-expand');
+  const previewPanel = document.querySelector('.preview-panel');
+
+  const ensureExpanded = () => {
+    if (previewPanel && !previewPanel.classList.contains('show-advanced-tools')) {
+      expandBtn?.click();
+    }
+  };
+
+  const syncTabClick = (tabName: string) => {
+    ensureExpanded();
+    const tabBtn = document.getElementById(`tab-${tabName}`);
+    if (tabBtn) tabBtn.click();
+  };
+
+  document.getElementById('lowcode-context-files')?.parentElement?.addEventListener('click', () => syncTabClick('files'));
+  document.getElementById('lowcode-context-pages')?.parentElement?.addEventListener('click', () => syncTabClick('files'));
+  document.getElementById('lowcode-context-api')?.parentElement?.addEventListener('click', () => syncTabClick('files'));
+  document.getElementById('lowcode-context-db')?.parentElement?.addEventListener('click', () => syncTabClick('files'));
+
+  const rows = panel.querySelectorAll('.lowcode-context-row');
+  rows.forEach((row) => {
+    row.addEventListener('click', () => {
+      const text = row.querySelector('span')?.textContent?.trim();
+      if (text === t('Деплой')) {
+        syncTabClick('terminal');
+      } else {
+        syncTabClick('files');
+      }
+    });
+  });
+}
+
+initCustomModelDropdown();
+initCustomFiltersDropdown();
+initLowcodeContextPanelClicks();
+
+document.getElementById('btn-chat-detach-context')?.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (!activeProject) return;
+  const ok = await confirmDialog('Открепить рабочую папку от этого проекта?', 'Открепление папки');
+  if (ok) {
+    activeProject.workspacePath = '';
+    activeProject.scopePath = '';
+    saveProjects();
+    updateSidebarFolderUI(activeProject);
+    renderSidebarProjects();
+    renderAgentTabs();
+    renderPreview();
+    refreshWorkspaceFilesUI();
+    appendBubble('Система', t('🗑️ Рабочая папка откреплена от проекта.'), true);
+  }
+});
+
+document.getElementById('btn-context-select-folder')?.addEventListener('click', () => {
+  btnSidebarSelectFolder.click();
 });
 
 // Sidebar Settings Click
@@ -5312,6 +5993,11 @@ function closeSettings() {
 }
 
 $('#btn-open-setup')?.addEventListener('click', openSettings);
+// The setup banner itself acts as a call-to-action to open Settings.
+setupBanner?.addEventListener('click', openSettings);
+setupBanner?.addEventListener('keydown', (e: any) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSettings(); }
+});
 $('#btn-close-settings').addEventListener('click', closeSettings);
 
 $('#btn-save-settings')?.addEventListener('click', closeSettings);
@@ -5445,7 +6131,13 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-$$('.modal-backdrop').forEach(b => b.addEventListener('click', e => { if (e.target === b) b.classList.add('hidden'); }));
+$$('.modal-backdrop').forEach(b => b.addEventListener('click', e => {
+  // The diff-modal owns a pending Promise (requestDiffApproval). Hiding it via
+  // the generic backdrop click would resolve nothing and hang the write — so
+  // skip it here; the user closes it with Approve/Reject/✕ instead.
+  if ((b as HTMLElement).id === 'diff-modal') return;
+  if (e.target === b) b.classList.add('hidden');
+}));
 
 // @-references autocomplete
 const atRefs = document.getElementById('at-references')!;
@@ -5516,7 +6208,7 @@ chatInput.addEventListener('input', () => {
 chatInput.addEventListener('paste', (e: ClipboardEvent) => {
   const items = e.clipboardData?.items;
   if (!items) return;
-  for (const item of items) {
+  for (const item of Array.from(items)) {
     if (item.type.startsWith('image/')) {
       e.preventDefault();
       const blob = item.getAsFile();
@@ -5542,7 +6234,7 @@ if (chatInputArea) {
     chatInputArea.classList.remove('drag-over');
     const files = e.dataTransfer?.files;
     if (!files) return;
-    for (const file of files) {
+    for (const file of Array.from(files)) {
       if (file.type.startsWith('image/')) {
         handleImageFile(file);
       }
@@ -5585,25 +6277,41 @@ async function handleImageFile(file: File) {
 // ═══════════════════════════════════════════
 function esc(t: string): string { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 function showActiveOp(text: string) {
-  const el = document.getElementById('active-op-indicator');
-  const txt = document.getElementById('active-op-text');
-  if (el) el.classList.remove('hidden');
-  if (txt) txt.textContent = text;
+  // Routed into the new activity bar's middle slot (tool/path display).
+  setActivityTool(text);
 }
 function hideActiveOp() {
-  document.getElementById('active-op-indicator')?.classList.add('hidden');
+  setActivityTool('');
 }
 function updateModelLabel() {
   const activeModelLabel = document.getElementById('active-model-label');
-  if (!activeModelLabel) return;
+  const agenticLabel = document.getElementById('agentic-topbar-model-label');
   const m = settings.cachedModels.find(x => x.id === settings.model);
+  
   if (m) {
     const ctxInfo = m.contextLength ? ` · ${(m.contextLength / 1000).toFixed(0)}K контекст` : '';
-    activeModelLabel.textContent = m.name + ctxInfo;
-    activeModelLabel.title = m.id + (m.isFree ? ' [Бесплатно]' : '') + ctxInfo;
+    const cleanName = (m.name || m.id).split(' · ')[0];
+    const textVal = cleanName + ctxInfo;
+    const titleVal = m.id + (m.isFree ? ' [Бесплатно]' : '') + ctxInfo;
+
+    if (activeModelLabel) {
+      activeModelLabel.textContent = textVal;
+      activeModelLabel.title = titleVal;
+    }
+    if (agenticLabel) {
+      agenticLabel.textContent = cleanName;
+      agenticLabel.title = titleVal;
+    }
   } else {
-    activeModelLabel.textContent = settings.model || 'Модель не выбрана';
-    activeModelLabel.title = '';
+    const textVal = settings.model || 'Модель не выбрана';
+    if (activeModelLabel) {
+      activeModelLabel.textContent = textVal;
+      activeModelLabel.title = '';
+    }
+    if (agenticLabel) {
+      agenticLabel.textContent = settings.model ? settings.model.split('/').pop() || settings.model : 'Auto';
+      agenticLabel.title = '';
+    }
   }
 }
 function updateSetupBanner() { setupBanner.classList.toggle('hidden', !!settings.apiKey); }
@@ -5674,7 +6382,19 @@ function init() {
   updateModelLabel(); 
   updateSetupBanner();
   applyTheme();
+  setupSystemThemeListener();
   applyVisualSettings();
+
+  // Populate version labels from the real app version (no more hardcoded "v1.3.7").
+  if (window.electronAPI?.getAppVersion) {
+    window.electronAPI.getAppVersion().then(v => {
+      if (!v) return;
+      const settingsVer = document.getElementById('settings-version');
+      if (settingsVer) settingsVer.textContent = `7/24 IDE v${v}`;
+      const aboutVer = document.getElementById('about-version');
+      if (aboutVer) aboutVer.textContent = `v${v}`;
+    }).catch(() => {});
+  }
   
   const examplesEl = $('.welcome-examples');
   if (examplesEl) {
@@ -5737,7 +6457,7 @@ function init() {
         await setWorkspaceFolder(folder);
       }
     } catch (err: any) {
-      alert(`Ошибка выбора папки: ${err.message}`);
+      alert(`${t('Ошибка выбора папки: ')}${err.message}`);
     }
   });
 
@@ -5898,88 +6618,350 @@ function init() {
     });
   }
 
-  // ═══ Chat model selector ═══
-  const chatModelSelect = document.getElementById('chat-model-select') as HTMLSelectElement;
-  
-  function renderFavoriteModelsPills() {
-    const container = document.getElementById('favorite-models-pills');
-    if (!container) return;
-    container.innerHTML = '';
-    
-    if (!settings.favoriteModels || settings.favoriteModels.length === 0) {
-      container.style.display = 'none';
+  // ═══ Chat model selector (custom dropdown) ═══
+  const chatModelSelect = document.getElementById('chat-model-select') as HTMLSelectElement | null;
+
+  // ── Custom model picker (replaces the native <select>) ──────────────────────
+  const pickerEl = document.getElementById('chat-model-picker');
+  const triggerEl = document.getElementById('chat-model-picker-trigger');
+  const panelEl = document.getElementById('chat-model-picker-panel');
+  const listEl = document.getElementById('chat-model-picker-list');
+  const searchEl = document.getElementById('chat-model-picker-search') as HTMLInputElement | null;
+  const tabsEl = document.getElementById('chat-model-picker-tabs');
+  const labelEl = document.getElementById('chat-model-picker-label');
+  const metaEl = document.getElementById('chat-model-picker-meta');
+  const footerEl = document.getElementById('chat-model-picker-footer');
+
+  // UI state for the picker
+  let pickerTab: 'all' | 'free' | 'favorites' = 'all';
+  let pickerQuery = '';
+
+  function formatContext(n: number): string {
+    if (!n || n <= 0) return '';
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+    if (n >= 1000) return `${Math.round(n / 1000)}K`;
+    return String(n);
+  }
+
+  function formatPrice(p?: number): string {
+    if (p === undefined || p === null || isNaN(p) || p <= 0) return '';
+    // OpenRouter returns price in $ per token, convert to per 1M for readability
+    const per1M = p * 1_000_000;
+    if (per1M < 0.1) return `$${per1M.toFixed(3)}/M`;
+    if (per1M < 10) return `$${per1M.toFixed(2)}/M`;
+    return `$${per1M.toFixed(1)}/M`;
+  }
+
+  /** Build the meta-text (tiny pill next to model name in the trigger). */
+  function updateChatModelTrigger() {
+    const m = settings.cachedModels.find(x => x.id === settings.model);
+    if (!labelEl || !metaEl) return;
+    if (!m) {
+      labelEl.textContent = settings.cachedModels.length ? '—' : t('Загрузка моделей...');
+      metaEl.textContent = '';
+      metaEl.classList.remove('free');
       return;
     }
-    container.style.display = 'flex';
-    
-    for (const mId of settings.favoriteModels) {
-      const modelInfo = settings.cachedModels.find(m => m.id === mId);
-      if (!modelInfo) continue;
-      
-      const pill = document.createElement('div');
-      pill.className = 'fav-model-pill' + (settings.model === mId ? ' active' : '');
-      
-      const cleanName = (modelInfo.name || modelInfo.id).split(' · ')[0];
-      const span = document.createElement('span');
-      span.textContent = cleanName;
-      pill.appendChild(span);
-      
-      const delBtn = document.createElement('div');
-      delBtn.title = t('Удалить из избранного');
-      delBtn.innerHTML = '<i data-lucide="x" style="width: 12px; height: 12px;"></i>';
-      delBtn.style.display = 'flex';
-      delBtn.style.alignItems = 'center';
-      delBtn.style.justifyContent = 'center';
-      delBtn.style.opacity = '0.6';
-      delBtn.style.marginLeft = '2px';
-      delBtn.addEventListener('mouseenter', () => delBtn.style.opacity = '1');
-      delBtn.addEventListener('mouseleave', () => delBtn.style.opacity = '0.6');
-      delBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        settings.favoriteModels = (settings.favoriteModels || []).filter(id => id !== mId);
-        saveSettings();
-        renderFavoriteModelsPills();
-        updateFavoriteModelStarUI();
-      });
-      pill.appendChild(delBtn);
-      
-      pill.addEventListener('click', () => {
-        settings.model = mId;
-        saveSettings();
-        if (chatModelSelect) {
-          chatModelSelect.value = mId;
-        }
-        updateModelLabel();
-        updateContextBar();
-        renderFavoriteModelsPills();
-        updateFavoriteModelStarUI();
-      });
-      container.appendChild(pill);
-    }
-    
-    setTimeout(() => {
-      if ((window as any).lucide) {
-        (window as any).lucide.createIcons();
-      }
-    }, 10);
-  }
-
-  function updateFavoriteModelStarUI() {
-    const btn = document.getElementById('btn-toggle-favorite-model');
-    if (!btn) return;
-    const icon = btn.querySelector('i');
-    if (!icon) return;
-    
-    const isFav = settings.favoriteModels && settings.favoriteModels.includes(settings.model);
-    if (isFav) {
-      icon.classList.add('active');
+    const cleanName = (m.name || m.id).split(' · ')[0];
+    labelEl.textContent = cleanName;
+    if (m.isFree) {
+      metaEl.textContent = 'FREE';
+      metaEl.classList.add('free');
     } else {
-      icon.classList.remove('active');
+      metaEl.classList.remove('free');
+      metaEl.textContent = m.contextLength ? formatContext(m.contextLength) : '';
     }
   }
 
+  function setChatModelPickerOpen(open: boolean) {
+    if (!panelEl || !triggerEl) return;
+    if (open) {
+      panelEl.classList.remove('hidden');
+      triggerEl.setAttribute('aria-expanded', 'true');
+      pickerQuery = '';
+      if (searchEl) {
+        searchEl.value = '';
+        setTimeout(() => searchEl.focus(), 30);
+      }
+      renderChatModelPickerList();
+    } else {
+      panelEl.classList.add('hidden');
+      triggerEl.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  /** Whether the panel is currently open. */
+  function isChatModelPickerOpen(): boolean {
+    return !!panelEl && !panelEl.classList.contains('hidden');
+  }
+
+  function selectChatModel(mId: string) {
+    if (!mId) return;
+    settings.model = mId;
+    saveSettings();
+    if (chatModelSelect) {
+      chatModelSelect.value = mId;
+      chatModelSelect.dispatchEvent(new Event('change'));
+    }
+    updateChatModelTrigger();
+    updateModelLabel();
+    updateContextBar();
+    renderChatModelPickerList();
+    setChatModelPickerOpen(false);
+  }
+
+  function toggleFavorite(mId: string, favBtn?: HTMLElement) {
+    if (!settings.favoriteModels) settings.favoriteModels = [];
+    const idx = settings.favoriteModels.indexOf(mId);
+    const nowFav = idx < 0;
+    if (idx >= 0) {
+      settings.favoriteModels.splice(idx, 1);
+    } else {
+      settings.favoriteModels.push(mId);
+    }
+    saveSettings();
+
+    // On the Favorites tab the row must appear/disappear → full re-render.
+    // Elsewhere update the star in place to avoid a scroll jump / flicker.
+    if (pickerTab === 'favorites') {
+      renderChatModelPickerList();
+      return;
+    }
+    if (favBtn) {
+      favBtn.classList.toggle('is-fav', nowFav);
+      favBtn.title = nowFav ? t('Убрать из избранного') : t('Добавить в избранное');
+    } else {
+      renderChatModelPickerList();
+    }
+    updateChatModelPickerCounts();
+  }
+
+  /** Update tab counters. */
+  function updateChatModelPickerCounts() {
+    if (!tabsEl) return;
+    const all = settings.cachedModels.length;
+    const free = settings.cachedModels.filter(m => m.isFree).length;
+    const favs = (settings.favoriteModels || []).filter(id =>
+      settings.cachedModels.some(m => m.id === id)
+    ).length;
+    const setCount = (sel: string, n: number) => {
+      const el = tabsEl.querySelector(`[data-count="${sel}"]`);
+      if (el) el.textContent = String(n);
+    };
+    setCount('all', all);
+    setCount('free', free);
+    setCount('favorites', favs);
+  }
+
+  function renderChatModelPickerList() {
+    if (!listEl) return;
+    updateChatModelPickerCounts();
+    listEl.innerHTML = '';
+
+    if (settings.cachedModels.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'chat-model-picker-empty';
+      empty.textContent = settings.apiKey || settings.llmProvider === 'ollama'
+        ? t('Загрузка моделей...')
+        : t('Сначала введите API-ключ...');
+      listEl.appendChild(empty);
+      if (footerEl) footerEl.textContent = '';
+      return;
+    }
+
+    const fav = new Set(settings.favoriteModels || []);
+    const q = pickerQuery.toLowerCase().trim();
+
+    const matches = (m: ModelInfo) => {
+      if (!q) return true;
+      return (
+        (m.name || '').toLowerCase().includes(q) ||
+        m.id.toLowerCase().includes(q)
+      );
+    };
+
+    let tabFiltered: ModelInfo[];
+    if (pickerTab === 'free') {
+      tabFiltered = settings.cachedModels.filter(m => m.isFree && matches(m));
+    } else if (pickerTab === 'favorites') {
+      tabFiltered = settings.cachedModels.filter(m => fav.has(m.id) && matches(m));
+    } else {
+      tabFiltered = settings.cachedModels.filter(matches);
+    }
+
+    if (tabFiltered.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'chat-model-picker-empty';
+      if (pickerTab === 'favorites' && fav.size === 0) {
+        empty.textContent = t('Нажмите на ★ рядом с любой моделью, чтобы добавить её в избранное.');
+      } else if (q) {
+        empty.textContent = t('По запросу ничего не найдено.');
+      } else {
+        empty.textContent = t('Модели не найдены');
+      }
+      listEl.appendChild(empty);
+      if (footerEl) footerEl.textContent = '';
+      return;
+    }
+
+    // ── Group: favourites (pinned at the top in the "all" tab) ──
+    let groups: { title?: string; items: ModelInfo[] }[];
+    if (pickerTab === 'all') {
+      const favItems = tabFiltered.filter(m => fav.has(m.id));
+      const freeItems = tabFiltered.filter(m => !fav.has(m.id) && m.isFree);
+      const paidItems = tabFiltered.filter(m => !fav.has(m.id) && !m.isFree);
+      groups = [];
+      if (favItems.length) groups.push({ title: t('★ Избранные'), items: favItems });
+      if (freeItems.length) groups.push({ title: t('Бесплатные'), items: freeItems });
+      if (paidItems.length) groups.push({ title: t('Все модели'), items: paidItems });
+    } else if (pickerTab === 'free') {
+      groups = [{ items: tabFiltered }];
+    } else {
+      // favourites tab: maintain user's order
+      const ordered = (settings.favoriteModels || [])
+        .map(id => tabFiltered.find(m => m.id === id))
+        .filter(Boolean) as ModelInfo[];
+      groups = [{ items: ordered }];
+    }
+
+    for (const g of groups) {
+      if (g.title) {
+        const h = document.createElement('div');
+        h.className = 'chat-model-picker-group-header';
+        h.textContent = g.title;
+        listEl.appendChild(h);
+      }
+      for (const m of g.items) {
+        listEl.appendChild(buildChatModelItem(m, fav));
+      }
+    }
+
+    if (footerEl) {
+      const totalShown = groups.reduce((acc, g) => acc + g.items.length, 0);
+      footerEl.textContent = totalShown === settings.cachedModels.length
+        ? `${totalShown} ${t('моделей')}`
+        : `${totalShown} ${t('из')} ${settings.cachedModels.length} ${t('моделей')}`;
+    }
+
+    if ((window as any).lucide) {
+      try { (window as any).lucide.createIcons(); } catch {}
+    }
+  }
+
+  function buildChatModelItem(m: ModelInfo, fav: Set<string>): HTMLElement {
+    const item = document.createElement('div');
+    item.className = 'chat-model-picker-item' + (m.id === settings.model ? ' active' : '');
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', m.id === settings.model ? 'true' : 'false');
+
+    const main = document.createElement('div');
+    main.className = 'chat-model-picker-item-main';
+
+    const cleanName = (m.name || m.id).split(' · ')[0];
+    const nameEl = document.createElement('div');
+    nameEl.className = 'chat-model-picker-item-name';
+    nameEl.textContent = cleanName;
+    main.appendChild(nameEl);
+
+    const idEl = document.createElement('div');
+    idEl.className = 'chat-model-picker-item-id';
+    idEl.textContent = m.id;
+    main.appendChild(idEl);
+
+    item.appendChild(main);
+
+    const meta = document.createElement('div');
+    meta.className = 'chat-model-picker-item-meta';
+
+    if (m.isFree) {
+      const b = document.createElement('span');
+      b.className = 'chat-model-picker-badge free';
+      b.textContent = 'FREE';
+      b.title = t('Бесплатная модель');
+      meta.appendChild(b);
+    } else {
+      const promptPrice = formatPrice(m.pricePrompt);
+      if (promptPrice) {
+        const b = document.createElement('span');
+        b.className = 'chat-model-picker-badge price';
+        b.textContent = promptPrice;
+        b.title = `${t('Цена prompt-токенов')} (per 1M)`;
+        meta.appendChild(b);
+      }
+    }
+
+    if (m.contextLength) {
+      const b = document.createElement('span');
+      b.className = 'chat-model-picker-badge context';
+      b.textContent = formatContext(m.contextLength);
+      b.title = `${m.contextLength.toLocaleString()} ${t('токенов контекста')}`;
+      meta.appendChild(b);
+    }
+
+    item.appendChild(meta);
+
+    const favBtn = document.createElement('button');
+    favBtn.type = 'button';
+    favBtn.className = 'chat-model-picker-item-fav' + (fav.has(m.id) ? ' is-fav' : '');
+    favBtn.title = fav.has(m.id) ? t('Убрать из избранного') : t('Добавить в избранное');
+    favBtn.innerHTML = '<i data-lucide="star"></i>';
+    favBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavorite(m.id, favBtn);
+    });
+    item.appendChild(favBtn);
+
+    item.addEventListener('click', () => selectChatModel(m.id));
+    return item;
+  }
+
+  // Initial trigger label
+  updateChatModelTrigger();
+
+  // Open / close
+  triggerEl?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setChatModelPickerOpen(!isChatModelPickerOpen());
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!pickerEl) return;
+    if (!isChatModelPickerOpen()) return;
+    if (pickerEl.contains(e.target as Node)) return;
+    setChatModelPickerOpen(false);
+  });
+
+  // Close on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isChatModelPickerOpen()) {
+      setChatModelPickerOpen(false);
+    }
+  });
+
+  // Search
+  searchEl?.addEventListener('input', () => {
+    pickerQuery = (searchEl.value || '').trim();
+    renderChatModelPickerList();
+  });
+
+  // Tabs
+  tabsEl?.querySelectorAll<HTMLButtonElement>('.chat-model-picker-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab as 'all' | 'free' | 'favorites' | undefined;
+      if (!tab) return;
+      pickerTab = tab;
+      tabsEl.querySelectorAll('.chat-model-picker-tab').forEach(t => {
+        t.classList.toggle('active', t === btn);
+        t.setAttribute('aria-selected', t === btn ? 'true' : 'false');
+      });
+      renderChatModelPickerList();
+    });
+  });
+
+  // Hidden <select> kept in sync for legacy code paths that still read its value.
   if (chatModelSelect) {
-    const syncChatModel = () => {
+    const syncHiddenSelect = () => {
       chatModelSelect.innerHTML = '';
       if (settings.cachedModels.length === 0) {
         chatModelSelect.innerHTML = '<option value="">—</option>';
@@ -5989,63 +6971,43 @@ function init() {
         const o = document.createElement('option');
         o.value = m.id;
         const freeBadge = m.isFree ? ' [FREE]' : '';
-        const ctxInfo = m.contextLength ? ` · ${(m.contextLength / 1000).toFixed(0)}K` : '';
+        const ctxInfo = m.contextLength ? ` · ${formatContext(m.contextLength)}` : '';
         o.textContent = (m.name || m.id).split(' · ')[0] + freeBadge + ctxInfo;
         if (m.id === settings.model) o.selected = true;
         chatModelSelect.appendChild(o);
       }
-      renderFavoriteModelsPills();
-      updateFavoriteModelStarUI();
     };
-    syncChatModel();
+    syncHiddenSelect();
 
+    // If anything else dispatches a `change` on the hidden select, mirror it.
     chatModelSelect.addEventListener('change', () => {
-      settings.model = chatModelSelect.value;
-      saveSettings();
-      updateModelLabel();
-      updateContextBar();
-      renderFavoriteModelsPills();
-      updateFavoriteModelStarUI();
-    });
-
-    const btnToggleFav = document.getElementById('btn-toggle-favorite-model');
-    btnToggleFav?.addEventListener('click', () => {
-      if (!settings.favoriteModels) settings.favoriteModels = [];
-      const current = settings.model;
-      if (!current) return;
-      
-      const idx = settings.favoriteModels.indexOf(current);
-      if (idx >= 0) {
-        settings.favoriteModels.splice(idx, 1);
-      } else {
-        if (settings.favoriteModels.length >= 3) {
-          settings.favoriteModels.shift();
-        }
-        settings.favoriteModels.push(current);
+      if (chatModelSelect.value && chatModelSelect.value !== settings.model) {
+        selectChatModel(chatModelSelect.value);
       }
-      saveSettings();
-      renderFavoriteModelsPills();
-      updateFavoriteModelStarUI();
     });
   }
 
-  // Sync model select when settings change
+  // Sync model selector when settings change (event raised after fetchModels)
   document.addEventListener('ag:models-updated', () => {
     if (chatModelSelect) {
-      const current = settings.model;
       chatModelSelect.innerHTML = '';
       for (const m of settings.cachedModels) {
         const o = document.createElement('option');
         o.value = m.id;
         const freeBadge = m.isFree ? ' [FREE]' : '';
         o.textContent = (m.name || m.id).split(' · ')[0] + freeBadge;
-        if (m.id === current) o.selected = true;
+        if (m.id === settings.model) o.selected = true;
         chatModelSelect.appendChild(o);
       }
-      renderFavoriteModelsPills();
-      updateFavoriteModelStarUI();
     }
+    updateChatModelTrigger();
+    renderChatModelPickerList();
   });
+
+// "Open Tasks tab" button inside the sticky plan-progress bar
+document.getElementById('ppb-open-tab')?.addEventListener('click', () => {
+  switchToPreviewTab('tasks');
+});
 
 // Stop Generation Button Click Listener
 document.getElementById('btn-stop-generation')?.addEventListener('click', () => {
@@ -6058,6 +7020,11 @@ document.getElementById('btn-stop-generation')?.addEventListener('click', () => 
       console.error('Failed to kill terminal command during generation stop:', err);
     });
     activeCommandExecId = null;
+  }
+  // Cancel a deferred "next step" hop so a stopped plan doesn't auto-resume.
+  if (nextStepTimer !== null) {
+    clearTimeout(nextStepTimer);
+    nextStepTimer = null;
   }
   setGeneratingState(false);
   isExecutingPlan = false;
@@ -6151,7 +7118,7 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
     // Run Code Button Delegate Listener
     const runBtn = (e.target as HTMLElement).closest('.btn-run-chat-code');
     if (runBtn) {
-      const codeBlock = runBtn.closest('.code-block-chat');
+      const codeBlock = runBtn.closest('.code-block-chat') as HTMLElement | null;
       const pre = codeBlock?.querySelector('pre');
       const lang = codeBlock?.dataset.lang || '';
       if (pre && activeProject?.workspacePath) {
@@ -6248,12 +7215,8 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
     if (toolActionBtn) {
       const accordion = toolActionBtn.closest('.tool-accordion') as HTMLElement;
       const toolIdx = parseInt(accordion?.dataset.toolIdx || '-1');
-      const toolType = accordion?.dataset.toolType || '';
       const action = toolActionBtn.dataset.action;
-      const aiBubbles = chatMessages.querySelectorAll('.chat-message.ai');
-      const lastAiBubble = aiBubbles[aiBubbles.length - 1];
-      const targetAccordion = lastAiBubble?.querySelector(`.tool-step-${toolIdx}`);
-      const contentEl = targetAccordion?.querySelector('.tool-accordion-content, .diff-widget-body');
+      const contentEl = accordion?.querySelector('.tool-accordion-content, .diff-widget-body');
 
       if (action === 'copy' && contentEl) {
         navigator.clipboard.writeText(contentEl.textContent || '').then(() => {
@@ -7014,7 +7977,7 @@ async function executeStepWithMicroAgent(planId: string, stepIdx: number) {
   currentStepIndex = stepIdx;
   planSteps[stepIdx].status = 'active';
   savePlanSteps();
-  
+
   const itemEl = document.getElementById(`step-item-${planId}-${stepIdx}`);
   if (itemEl) {
     itemEl.classList.add('active');
@@ -7025,50 +7988,105 @@ async function executeStepWithMicroAgent(planId: string, stepIdx: number) {
       refreshIcons();
     }
   }
-  
+
   setGeneratingState(true);
-  setCurrentAction(`📋 Шаг ${stepIdx + 1}: ${planSteps[stepIdx].text}`);
+  setCurrentAction(`📋 ${t('Шаг')} ${stepIdx + 1}: ${planSteps[stepIdx].text}`);
   renderTasksUI();
 
   const stepText = planSteps[stepIdx].text;
-  
-  const time = new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-  const microAgentBubble = document.createElement('div');
-  microAgentBubble.className = 'chat-message ai micro-agent-message';
-  microAgentBubble.innerHTML = `
-    <div class="message-meta">
-      <span class="sender-name">🤖 ${t('Микро-агент')}</span>
-      <span class="time">${time}</span>
-      <span class="stream-indicator"><i data-lucide="loader-2"></i></span>
-    </div>
-    <div class="message-text">
-      <div style="font-weight: 600; margin-bottom: 6px; font-size: 13px;">Выполняю микро-задачу: "${esc(stepText)}"</div>
-      <div class="micro-agent-logs" style="font-size: 11px; color: var(--text-secondary); border-left: 2px solid var(--border-strong); padding-left: 8px; margin-top: 8px; font-family: sans-serif; line-height: 1.55;">
-        <div>⚡ Инициализация изолированного контекста...</div>
+
+  // ── New micro-agent card ──────────────────────────────────────────────
+  // Flat card design, status pill, structured "trace" instead of an emoji log.
+  const card = document.createElement('div');
+  card.className = 'chat-message ai micro-agent-card';
+  card.innerHTML = `
+    <div class="ma-header">
+      <div class="ma-icon"><i data-lucide="bot"></i></div>
+      <div class="ma-title">
+        <div class="ma-name">${esc(t('Микро-агент'))} · ${esc(t('Шаг'))} ${stepIdx + 1}</div>
+        <div class="ma-task" title="${esc(stepText)}">${esc(stepText)}</div>
+      </div>
+      <div class="ma-status running" role="status">
+        <span class="ma-dot" aria-hidden="true"></span>
+        <span class="ma-status-label">${esc(t('выполняется'))}</span>
       </div>
     </div>
+    <div class="ma-body">
+      <div class="ma-trace" role="log" aria-live="polite"></div>
+    </div>
+    <div class="ma-footer hidden"></div>
   `;
-  chatMessages.appendChild(microAgentBubble);
+  chatMessages.appendChild(card);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   refreshIcons();
 
-  const logsEl = microAgentBubble.querySelector('.micro-agent-logs') as HTMLElement;
-  const appendLog = (text: string) => {
-    const logDiv = document.createElement('div');
-    logDiv.textContent = text;
-    logsEl.appendChild(logDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  };
+  const traceEl = card.querySelector('.ma-trace') as HTMLElement;
+  const statusEl = card.querySelector('.ma-status') as HTMLElement;
+  const statusLabelEl = card.querySelector('.ma-status-label') as HTMLElement;
+  const footerEl = card.querySelector('.ma-footer') as HTMLElement;
 
+  type TraceKind = 'info' | 'tool' | 'success' | 'error' | 'warn';
+  function addTraceLine(opts: { icon: string; text: string; type?: TraceKind }): HTMLElement {
+    const line = document.createElement('div');
+    line.className = `ma-trace-line type-${opts.type || 'info'}`;
+    line.innerHTML = `<i data-lucide="${opts.icon}" class="ma-trace-icon"></i><span class="ma-trace-content"></span>`;
+    (line.querySelector('.ma-trace-content') as HTMLElement).textContent = opts.text;
+    traceEl.appendChild(line);
+    if (autoScrollEnabled) chatMessages.scrollTop = chatMessages.scrollHeight;
+    refreshIcons();
+    return line;
+  }
+
+  function setLineStatus(line: HTMLElement, type: 'success' | 'error' | 'warn', icon?: string) {
+    line.classList.remove('type-info', 'type-tool', 'type-success', 'type-error', 'type-warn');
+    line.classList.add(`type-${type}`);
+    if (icon) {
+      const ic = line.querySelector('.ma-trace-icon');
+      if (ic) ic.setAttribute('data-lucide', icon);
+    }
+    refreshIcons();
+  }
+
+  function setStatus(state: 'running' | 'success' | 'failed', label: string) {
+    statusEl.classList.remove('running', 'success', 'failed');
+    statusEl.classList.add(state);
+    statusLabelEl.textContent = label;
+  }
+
+  // Map agent tool types to UI metadata.
+  const TOOL_META: Record<string, { icon: string; label: string }> = {
+    read_file:        { icon: 'file-text',     label: t('Чтение') },
+    read_dir:         { icon: 'folder-open',   label: t('Просмотр папки') },
+    write_file:       { icon: 'file-plus',     label: t('Запись') },
+    edit_file:        { icon: 'edit-3',        label: t('Правка') },
+    execute_command:  { icon: 'terminal',      label: t('Команда') },
+    search_code:      { icon: 'search',        label: t('Поиск') },
+    list_components:  { icon: 'layout-grid',   label: t('Компоненты') },
+    check_image_size: { icon: 'image',         label: t('Изображение') },
+  };
+  function metaFor(tool: AgentTool): { icon: string; label: string } {
+    if (tool.type.startsWith('mcp__')) {
+      return { icon: 'plug', label: 'MCP' };
+    }
+    return TOOL_META[tool.type] || { icon: 'wrench', label: tool.type };
+  }
+  function targetFor(tool: AgentTool): string {
+    return tool.params?.path
+        || tool.params?.command
+        || tool.params?.query
+        || (tool.type.startsWith('mcp__') ? tool.type.replace('mcp__', '') : '')
+        || '';
+  }
+
+  // Build the system prompt — same logic as before, just trimmed.
   let dynamicSystemPrompt = SYSTEM_PROMPT_BUILD;
   dynamicSystemPrompt = await injectMcpToolsIntoPrompt(dynamicSystemPrompt);
-  
-  // Inject User Profile preferences
+
   let profile = { codingStyle: '', libraries: [] as string[], customNotes: '' };
   try {
     const saved = localStorage.getItem('ag_user_profile');
     if (saved) profile = JSON.parse(saved);
-  } catch (e) {}
+  } catch (e) { /* ignore corrupted profile */ }
 
   if (profile.codingStyle || profile.libraries.length > 0 || profile.customNotes) {
     dynamicSystemPrompt += `\n\n## ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ И ПРЕДПОЧТЕНИЯ (User Model)
@@ -7076,12 +8094,11 @@ async function executeStepWithMicroAgent(planId: string, stepIdx: number) {
 ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}${profile.libraries.length > 0 ? `- Библиотеки: ${profile.libraries.join(', ')}\n` : ''}${profile.customNotes ? `- Примечания: ${profile.customNotes}\n` : ''}`;
   }
 
-  // Inject dynamic skills
   let workspaceFiles: any[] = [];
   if (activeProject && activeProject.workspacePath) {
     try {
       workspaceFiles = await window.electronAPI.readDir(activeProject.workspacePath);
-    } catch (e) {}
+    } catch (e) { /* listing might fail on transient FS errors; non-fatal */ }
   }
   const activeSkills = detectActiveSkills(stepText, workspaceFiles);
   if (activeSkills.length > 0) {
@@ -7095,21 +8112,18 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
 Выполняй любые чтения, записи, правки файлов или терминальные команды.
 Когда ты полностью закончишь работу по шагу, напиши: "Шаг выполнен." и останови генерацию. Не пиши лишних рассуждений в конце.`;
 
-  let microHistory: ChatMessage[] = [
+  const microHistory: ChatMessage[] = [
     { role: 'system', content: dynamicSystemPrompt },
     { role: 'user', content: `Выполни шаг: "${stepText}". Используй инструменты для редактирования/записи файлов и запуска необходимых команд.` }
   ];
 
   let stepSuccess = true;
   let microStepCount = 0;
+  let toolsExecuted = 0;
   const maxMicroSteps = 8;
-
-  const mainHistoryTokensCount = activeProject ? activeProject.chatHistory.length * 200 : 0;
-  appendLog(`🤖 Контекст очищен (экономия токенов: ~${mainHistoryTokensCount}).`);
 
   while (microStepCount < maxMicroSteps && isGenerating) {
     microStepCount++;
-    appendLog(`🤖 Шаг рассуждения ${microStepCount}...`);
 
     try {
       const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
@@ -7137,40 +8151,62 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
       const tools = parseTools(reply);
       if (tools.length === 0) {
         if (reply.includes('Шаг выполнен') || reply.toLowerCase().includes('готово') || reply.toLowerCase().includes('выполнено')) {
-          appendLog('🤖 Микро-агент сообщил о завершении задачи.');
-          break;
-        } else if (reply.includes('\`\`\`')) {
-          appendLog('⚠️ Агент вывел код текстом. Запуск авто-исправления...');
-          microHistory.push({ role: 'user', content: 'ОШИБКА: Ты вывел исходный код в виде обычного текста. Перепиши ответ, используя ТОЛЬКО инструменты <write_file> или <edit_file>.' });
-        } else {
-          appendLog('🤖 Микро-агент завершил шаг.');
           break;
         }
-      } else {
-        for (const tool of tools) {
-          appendLog(`🛠️ Запуск: ${tool.type} (${tool.params.path || tool.params.command || ''})...`);
-          try {
-            const toolRes = await handleToolExecution(tool);
-            microHistory.push({ role: 'system', content: `Результат выполнения ${tool.rawTag}:\n${toolRes}` });
-            appendLog(`✅ Выполнено.`);
-          } catch (toolErr: any) {
-            microHistory.push({ role: 'system', content: `Ошибка при выполнении ${tool.rawTag}:\n${toolErr.message}` });
-            appendLog(`❌ Ошибка: ${toolErr.message}`);
-            if (tool.type === 'execute_command') {
-              appendLog(`🔧 Запущено самолечение ошибки компиляции...`);
-              microHistory.push({ role: 'user', content: `Произошла ошибка сборки при запуске команды. Исправь файлы кода, чтобы сборка проходила успешно.` });
-            }
+        if (reply.includes('```')) {
+          addTraceLine({ icon: 'alert-triangle', text: t('Агент вывел код текстом — переспрашиваю'), type: 'warn' });
+          microHistory.push({
+            role: 'user',
+            content: 'ОШИБКА: Ты вывел исходный код в виде обычного текста. Перепиши ответ, используя ТОЛЬКО инструменты <write_file> или <edit_file>.'
+          });
+          continue;
+        }
+        // Empty reply — treat as "the agent has nothing else to do".
+        break;
+      }
+
+      for (const tool of tools) {
+        if (!isGenerating) break;
+        const meta = metaFor(tool);
+        const target = targetFor(tool);
+        const line = addTraceLine({
+          icon: meta.icon,
+          text: target ? `${meta.label}: ${target}` : meta.label,
+          type: 'tool',
+        });
+        try {
+          const toolRes = await handleToolExecution(tool);
+          microHistory.push({ role: 'system', content: `Результат выполнения ${tool.rawTag}:\n${toolRes}` });
+          // If the underlying execute_command returned a non-zero code, mark
+          // the line as a warning even though no JS exception was thrown.
+          if (tool.type === 'execute_command' && /Код завершения:\s*(?!0\b)\d+/.test(toolRes)) {
+            setLineStatus(line, 'warn', 'alert-triangle');
+          } else {
+            setLineStatus(line, 'success', 'check');
+          }
+          toolsExecuted++;
+        } catch (toolErr: any) {
+          microHistory.push({ role: 'system', content: `Ошибка при выполнении ${tool.rawTag}:\n${toolErr.message}` });
+          setLineStatus(line, 'error', 'x');
+          if (tool.type === 'execute_command') {
+            microHistory.push({
+              role: 'user',
+              content: 'Произошла ошибка сборки при запуске команды. Исправь файлы кода, чтобы сборка проходила успешно.'
+            });
           }
         }
       }
     } catch (e: any) {
-      appendLog(`❌ Ошибка суб-агента: ${e.message}`);
+      addTraceLine({ icon: 'alert-circle', text: `${t('Ошибка')}: ${e.message}`, type: 'error' });
       stepSuccess = false;
       break;
     }
   }
 
-  microAgentBubble.querySelector('.stream-indicator')?.remove();
+  if (!isGenerating) {
+    stepSuccess = false;
+  }
+
   if (stepSuccess) {
     if (workspacePath) {
       try {
@@ -7179,22 +8215,22 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
         console.error('Failed to merge shadow workspace:', err);
       }
     }
+    setStatus('success', t('готово'));
+    footerEl.classList.remove('hidden');
+    footerEl.classList.add('success');
+    footerEl.innerHTML = `<i data-lucide="check-circle-2"></i><span>${esc(t('Микро-агент успешно завершил работу. Изменения из теневой песочницы влиты в основной проект.'))}</span><span class="ma-footer-meta">${toolsExecuted} ${esc(t('действий'))} · ${microStepCount} ${esc(t('шагов'))}</span>`;
+    refreshIcons();
 
-    microAgentBubble.querySelector('.message-text')!.innerHTML += `
-      <div style="margin-top: 10px; padding: 8px 12px; background: rgba(43, 138, 62, 0.05); border-left: 3px solid var(--accent-green); border-radius: 4px; font-size: 12px; color: var(--accent-green); display: flex; align-items: center; gap: 6px;">
-        <i data-lucide="check-circle-2"></i>
-        <span>${t('Микро-агент успешно завершил работу. Изменения из теневой песочницы влиты в основной проект.')}</span>
-      </div>
-    `;
-    
-    activeProject!.chatHistory.push({
+    activeProject?.chatHistory.push({
       role: 'assistant',
       content: `[Выполнен Шаг ${stepIdx + 1} плана] Микро-агент успешно реализовал задачу: "${stepText}".`
     });
     saveProjects();
 
-    setTimeout(() => {
-      markStepCompleted(planId, stepIdx);
+    if (nextStepTimer !== null) clearTimeout(nextStepTimer);
+    nextStepTimer = setTimeout(() => {
+      nextStepTimer = null;
+      if (isExecutingPlan) markStepCompleted(planId, stepIdx);
     }, 1000);
   } else {
     if (workspacePath) {
@@ -7205,15 +8241,17 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
       }
     }
 
-    microAgentBubble.querySelector('.message-text')!.innerHTML += `
-      <div style="margin-top: 10px; padding: 8px 12px; background: rgba(201, 42, 42, 0.05); border-left: 3px solid var(--accent-red); border-radius: 4px; font-size: 12px; color: var(--accent-red); display: flex; align-items: center; gap: 6px;">
-        <i data-lucide="alert-circle"></i>
-        <span>${t('Микро-агент завершился с ошибкой. Изменения в теневой песочнице сброшены.')}</span>
-      </div>
-    `;
+    const abortMessage = !isGenerating
+      ? t('Выполнение шага остановлено пользователем. Изменения в теневой песочнице сброшены.')
+      : t('Микро-агент завершился с ошибкой. Изменения в теневой песочнице сброшены.');
+
+    setStatus('failed', t('ошибка'));
+    footerEl.classList.remove('hidden');
+    footerEl.classList.add('failed');
+    footerEl.innerHTML = `<i data-lucide="alert-circle"></i><span>${esc(abortMessage)}</span>`;
+    refreshIcons();
     setGeneratingState(false);
   }
-  refreshIcons();
 }
 
 function switchToPlanMode() {
@@ -7287,77 +8325,11 @@ ${selectedContext}
   }
 }
 
-async function runPlanCritic(lastUserMsg: string, steps: string[]) {
-  const planWidgets = document.querySelectorAll('.plan-widget');
-  if (planWidgets.length === 0) return;
-  const targetWidget = planWidgets[planWidgets.length - 1] as HTMLElement;
-
-  const stepsList = targetWidget.querySelector('.plan-steps-list');
-  if (!stepsList) return;
-
-  const reviewBox = document.createElement('div');
-  reviewBox.className = 'plan-critic-review-box';
-  reviewBox.innerHTML = `
-    <div class="plan-critic-review-title">
-      <i data-lucide="shield-check" class="spin" style="width:14px; height:14px;"></i>
-      <span>${t('Проверка планов Агентом-Критиком...')}</span>
-    </div>
-    <div class="plan-critic-review-content" style="opacity: 0.7; font-style: italic;">
-      Критик анализирует безопасность и архитектуру шагов...
-    </div>
-  `;
-  stepsList.parentNode?.insertBefore(reviewBox, stepsList.nextSibling);
-  refreshIcons();
-
-  const criticPrompt = `Ты — Агент-Критик в составе Cognitive No-Code IDE.
-Твоя задача — проанализировать предложенный план разработки на соответствие исходному запросу пользователя и требованиям безопасности (отсутствие деструктивных действий, перетирания важного кода, безопасность структуры).
-
-Исходный запрос пользователя:
-"${lastUserMsg}"
-
-Предложенный план:
-${steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
-
-Сделай краткое ревью (2-3 предложения) на русском языке. Укажи, безопасен ли план и учтены ли ключевые требования. Если есть критические замечания — выдели их. Ответь кратко, без лишнего оформления.`;
-
-  try {
-    const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
-      method: 'POST',
-      headers: getLLMHeaders(),
-      body: JSON.stringify(getLLMBody({
-        model: settings.model,
-        messages: [{ role: 'user', content: criticPrompt }],
-        temperature: 0.3,
-        max_tokens: 500,
-      })),
-    });
-
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    const reviewText = data.choices?.[0]?.message?.content?.trim() || 'Проверка завершена. Замечаний нет.';
-
-    reviewBox.innerHTML = `
-      <div class="plan-critic-review-title">
-        <i data-lucide="shield-check" style="color: var(--accent-green); width:14px; height:14px;"></i>
-        <span>${t('Агент-Критик: Ревью плана')}</span>
-      </div>
-      <div class="plan-critic-review-content">
-        ${esc(reviewText).replace(/\n/g, '<br>')}
-      </div>
-    `;
-    refreshIcons();
-  } catch (err: any) {
-    reviewBox.innerHTML = `
-      <div class="plan-critic-review-title">
-        <i data-lucide="alert-triangle" style="color: var(--accent-red); width:14px; height:14px;"></i>
-        <span>${t('Агент-Критик: Ошибка проверки')}</span>
-      </div>
-      <div class="plan-critic-review-content">
-        Не удалось провести автоматическое ревью: ${esc(err.message)}
-      </div>
-    `;
-    refreshIcons();
-  }
+async function runPlanCritic(_lastUserMsg: string, _steps: string[]) {
+  // Critic agent removed in v1.4.3 — the extra LLM round-trip after every plan
+  // creation noticeably slowed planning down and the review was rarely useful.
+  // The function body is intentionally a no-op so legacy callers keep compiling.
+  return;
 }
 
 // Note: the previous "keep-alive ping" was removed — it sent real billable requests
@@ -7414,7 +8386,7 @@ async function ensureGitignored(entry: string) {
 
 function showSnapshotDialog() {
   if (!activeProject || !activeProject.workspacePath) {
-    alert('Пожалуйста, выберите рабочую папку проекта для создания снапшота.');
+    alert(t('Пожалуйста, выберите рабочую папку проекта для создания снапшота.'));
     return;
   }
 
@@ -7499,7 +8471,7 @@ async function autoCheckpoint(label: string) {
 
 async function createSnapshot(name: string, desc: string) {
   if (!activeProject || !activeProject.workspacePath) {
-    alert('Пожалуйста, выберите рабочую папку проекта для создания снапшота.');
+    alert(t('Пожалуйста, выберите рабочую папку проекта для создания снапшота.'));
     return;
   }
   showThinking();
@@ -7542,7 +8514,7 @@ async function createSnapshot(name: string, desc: string) {
     appendBubble('Система', `📸 ${t('Снапшот создан')}: "${newSnapshot.name}" (${Object.keys(filesData).length}, ${formatBytes(totalSize)}).`, true);
     await renderSnapshotsUI();
   } catch (err: any) {
-    alert(`Ошибка создания снапшота: ${err.message}`);
+    alert(`${t('Ошибка создания снапшота: ')}${err.message}`);
   } finally {
     removeThinking();
   }
@@ -7559,7 +8531,7 @@ async function rollbackToSnapshot(snapshotId: string) {
     const snapshots = await loadProjectSnapshots();
     const snap = snapshots.find(s => s.id === snapshotId);
     if (!snap) {
-      alert('Снапшот не найден.');
+      alert(t('Снапшот не найден.'));
       return;
     }
 
@@ -7595,7 +8567,7 @@ async function rollbackToSnapshot(snapshotId: string) {
     refreshWorkspaceFilesUI();
     
   } catch (err: any) {
-    alert(`Ошибка при восстановлении снапшота: ${err.message}`);
+    alert(`${t('Ошибка восстановления снапшота: ')}${err.message}`);
   } finally {
     removeThinking();
   }
@@ -7611,7 +8583,7 @@ async function deleteSnapshot(snapshotId: string) {
     await saveProjectSnapshots(filtered);
     await renderSnapshotsUI();
   } catch (err: any) {
-    alert(`Ошибка удаления снапшота: ${err.message}`);
+    alert(`${t('Ошибка удаления снапшота: ')}${err.message}`);
   }
 }
 
@@ -7697,6 +8669,109 @@ function rebuildPlan(planId: string) {
     });
   }
   refreshIcons();
+}
+
+async function loadWelcomeGitStatus(workspacePath: string, container: HTMLElement) {
+  const gitContent = container.querySelector('#welcome-git-content');
+  const branchContainer = container.querySelector('#welcome-git-branch-container');
+  if (!gitContent) return;
+
+  gitContent.innerHTML = `
+    <div class="dashboard-git-clean">
+      <i data-lucide="loader-2" class="action-spinner"></i>
+      <span>${t('Проверка статуса Git...')}</span>
+    </div>
+  `;
+  refreshIcons();
+
+  try {
+    const branchRes = await window.electronAPI.executeCommand('git branch --show-current', workspacePath);
+    const branchName = branchRes.code === 0 ? branchRes.stdout.trim() : '';
+
+    if (branchContainer) {
+      if (branchName) {
+        branchContainer.innerHTML = `
+          <div class="dashboard-git-branch-badge" title="${t('Текущая ветка Git')}">
+            <i data-lucide="git-branch" style="width: 10px; height: 10px;"></i>
+            <span>${esc(branchName)}</span>
+          </div>
+        `;
+      } else {
+        branchContainer.innerHTML = '';
+      }
+    }
+
+    const statusRes = await window.electronAPI.executeCommand('git status --porcelain', workspacePath);
+    if (statusRes.code !== 0) {
+      gitContent.innerHTML = `
+        <div class="dashboard-git-clean">
+          <i data-lucide="git-pull-request" style="color: var(--text-muted); width: 16px; height: 16px;"></i>
+          <span style="font-size: 11px;">${t('Папка не является репозиторием Git')}</span>
+          <button class="secondary-btn tiny" id="btn-welcome-git-init" style="margin-top: 4px; padding: 2px 6px; font-size: 10px;">${t('Инициализировать')}</button>
+        </div>
+      `;
+      container.querySelector('#btn-welcome-git-init')?.addEventListener('click', async () => {
+        await window.electronAPI.executeCommand('git init', workspacePath);
+        loadWelcomeGitStatus(workspacePath, container);
+      });
+    } else {
+      const lines = statusRes.stdout.split('\n').map(l => l.trim()).filter(l => l !== '');
+      if (lines.length === 0) {
+        gitContent.innerHTML = `
+          <div class="dashboard-git-clean">
+            <i data-lucide="check-circle-2" style="color: var(--accent-green); width: 16px; height: 16px;"></i>
+            <span style="font-weight: 550; color: var(--text-primary); font-size: 11px;">${t('Рабочая копия чиста')}</span>
+            <span style="font-size: 10px;">${t('Все изменения зафиксированы.')}</span>
+          </div>
+        `;
+      } else {
+        let fileListHTML = '<div class="git-file-list" style="max-height: 120px;">';
+        for (const line of lines.slice(0, 10)) {
+          const status = line.slice(0, 2);
+          const filepath = line.slice(3).trim();
+          const filename = filepath.split(/[\\/]/).pop() || filepath;
+
+          let statusLabel = 'M';
+          let statusClass = 'modified';
+          if (status.includes('?') || status.includes('A')) {
+            statusLabel = 'A';
+            statusClass = 'added';
+          } else if (status.includes('D')) {
+            statusLabel = 'D';
+            statusClass = 'deleted';
+          } else if (status.includes('U')) {
+            statusLabel = 'U';
+            statusClass = 'untracked';
+          }
+
+          fileListHTML += `
+            <div class="git-file-item" title="${esc(filepath)}" style="padding: 4px 6px;">
+              <span class="git-file-name" style="max-width: 70%;">${esc(filename)}</span>
+              <span class="git-file-status ${statusClass}" style="font-size: 8px; padding: 1px 3px;">${statusLabel}</span>
+            </div>
+          `;
+        }
+        if (lines.length > 10) {
+          fileListHTML += `
+            <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 4px;">
+              ... и еще ${lines.length - 10} файлов
+            </div>
+          `;
+        }
+        fileListHTML += '</div>';
+
+        gitContent.innerHTML = `
+          <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+            ${t('Изменения')} (${lines.length}):
+          </div>
+          ${fileListHTML}
+        `;
+      }
+    }
+    refreshIcons();
+  } catch (err) {
+    gitContent.innerHTML = `<div class="dashboard-git-clean"><span>${t('Ошибка статуса Git')}</span></div>`;
+  }
 }
 
 init();

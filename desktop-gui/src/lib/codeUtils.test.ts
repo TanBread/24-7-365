@@ -97,8 +97,52 @@ describe('parseToolTags', () => {
     expect(tools.some(t => t.type === 'search_code' && t.params.query === 'renderChat')).toBe(true);
   });
 
+  it('accepts read/search/execute tags closed with a plain >', () => {
+    const tools = parseToolTags('<read_file path="index.html" full="true"><search_code query="appendBubble"><execute_command command="npm test">');
+    expect(tools.some(t => t.type === 'read_file' && t.params.path === 'index.html' && t.params.full === true)).toBe(true);
+    expect(tools.some(t => t.type === 'search_code' && t.params.query === 'appendBubble')).toBe(true);
+    expect(tools.some(t => t.type === 'execute_command' && t.params.command === 'npm test')).toBe(true);
+  });
+
   it('returns empty array when no tags present', () => {
     expect(parseToolTags('just some plain text')).toEqual([]);
+  });
+
+  // Regression: when an unterminated <write_file> is followed by another
+  // <write_file>, the first tool's content must NOT include the second tool.
+  it('does not let an unterminated write_file swallow the next one', () => {
+    const text = [
+      '<write_file path="a.ts">',
+      '// content of a (no closing tag)',
+      '<write_file path="b.ts">',
+      'CONTENT_OF_B',
+      '</write_file>',
+    ].join('\n');
+    const tools = parseToolTags(text);
+    expect(tools).toHaveLength(2);
+    const a = tools.find(t => t.params.path === 'a.ts');
+    const b = tools.find(t => t.params.path === 'b.ts');
+    expect(a).toBeDefined();
+    expect(b).toBeDefined();
+    expect(a!.params.content).not.toContain('CONTENT_OF_B');
+    expect(b!.params.content).toContain('CONTENT_OF_B');
+  });
+
+  // Same protection for edit_file.
+  it('does not let an unterminated edit_file swallow the next one', () => {
+    const text = [
+      '<edit_file path="a.ts"><search>X</search><replace>Y</replace>',
+      '<edit_file path="b.ts"><search>P</search><replace>Q</replace></edit_file>',
+    ].join('\n');
+    const tools = parseToolTags(text);
+    const editsA = tools.filter(t => t.type === 'edit_file' && t.params.path === 'a.ts');
+    const editsB = tools.filter(t => t.type === 'edit_file' && t.params.path === 'b.ts');
+    expect(editsA).toHaveLength(1);
+    expect(editsB).toHaveLength(1);
+    expect(editsA[0].params.search).toBe('X');
+    expect(editsA[0].params.replace).toBe('Y');
+    expect(editsB[0].params.search).toBe('P');
+    expect(editsB[0].params.replace).toBe('Q');
   });
 });
 

@@ -57,7 +57,7 @@
     </header>
 
     <!-- ═══════════ SETUP BANNER ═══════════ -->
-    <div id="setup-banner" class="setup-banner hidden">
+    <div id="setup-banner" class="setup-banner hidden" role="button" tabindex="0" title="Открыть настройки">
       <i data-lucide="key"></i>
       <span>Для начала работы добавьте API-ключ OpenRouter в Настройках</span>
     </div>
@@ -67,11 +67,24 @@
 
       <!-- Left Sidebar (Chats & Workspace) -->
       <aside class="sidebar">
+        <div class="agentic-sidebar-brand" aria-label="7/24 IDE">
+          <div class="agentic-brand-mark"><i data-lucide="home"></i></div>
+          <div class="agentic-brand-text">
+            <span>7/24 IDE</span>
+            <small>Low-code workspace</small>
+          </div>
+        </div>
+
         <div class="sidebar-header">
           <button id="btn-sidebar-new-chat" class="sidebar-new-chat-btn">
             <i data-lucide="plus"></i>
-            <span>Новый чат</span>
+            <span>Новый проект</span>
           </button>
+        </div>
+
+        <div class="agentic-chats-heading">
+          <span>Проекты</span>
+          <button class="agentic-icon-btn" id="btn-agentic-new-chat-mini" title="Новый проект" aria-label="Новый проект"><i data-lucide="plus"></i></button>
         </div>
         
         <div class="sidebar-search-box hidden" id="sidebar-search-box">
@@ -114,6 +127,47 @@
 
       <!-- Chat Panel -->
       <section class="chat-panel" id="chat-panel">
+        <div class="agentic-chat-topbar">
+          <button class="agentic-chat-title" id="agentic-chat-title" title="Переименовать чат">
+            <span id="agentic-chat-title-text">Новый проект</span>
+            <i data-lucide="chevron-down"></i>
+          </button>
+          <div class="agentic-chat-topbar-actions">
+            <div class="agentic-context-wrap">
+              <button class="agentic-context-btn" id="btn-chat-attach-context" title="Подключить рабочую папку">
+                <i data-lucide="paperclip"></i>
+                <span>Подключить контекст</span>
+              </button>
+              <button class="agentic-icon-btn hidden" id="btn-chat-detach-context" title="Отключить рабочую папку">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            <button class="agentic-icon-btn" id="btn-chat-focus-search" title="Поиск в чате" aria-label="Поиск в чате"><i data-lucide="search"></i></button>
+            <div style="position: relative; display: inline-block;">
+              <button class="agentic-icon-btn" id="btn-chat-more-actions" title="Действия чата" aria-label="Действия чата"><i data-lucide="sliders-horizontal"></i></button>
+              <div class="custom-filters-dropdown hidden" id="custom-filters-dropdown">
+                <div class="filters-header">Фильтры проекта</div>
+                <div class="filters-body">
+                  <div class="filter-section">
+                    <label for="topbar-scope-input">Область работы (scope):</label>
+                    <input type="text" id="topbar-scope-input" placeholder="например: src/web" autocomplete="off" />
+                    <small>Ограничить чтение и запись файлов указанной подпапкой</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="plan-progress-bar" class="plan-progress-bar hidden" role="status" aria-live="polite">
+          <div class="ppb-row">
+            <i data-lucide="map" class="ppb-icon"></i>
+            <span class="ppb-title" id="ppb-title">Выполнение плана</span>
+            <span class="ppb-counts" id="ppb-counts">0/0</span>
+            <button class="ppb-open-tab" id="ppb-open-tab" title="Открыть вкладку Задачи"><i data-lucide="external-link"></i></button>
+          </div>
+          <div class="ppb-track"><div class="ppb-fill" id="ppb-fill"></div></div>
+          <div class="ppb-current" id="ppb-current"></div>
+        </div>
         <div class="chat-messages" id="chat-messages" role="log" aria-live="polite" aria-label="Чат с ассистентом"></div>
         <div id="chat-search-bar" class="chat-search-bar hidden">
           <i data-lucide="search" style="width:14px;height:14px;flex-shrink:0;color:var(--text-muted);"></i>
@@ -126,12 +180,19 @@
           <button id="btn-export-chat" class="chat-search-close" title="Экспортировать чат в Markdown"><i data-lucide="download"></i></button>
         </div>
         <button id="btn-scroll-bottom" class="scroll-bottom-btn hidden" title="Прокрутить вниз"><i data-lucide="chevron-down"></i></button>
-        <div id="chat-gen-indicator" class="chat-gen-indicator hidden">
-          <span class="gen-dot"></span><span class="gen-dot"></span><span class="gen-dot"></span>
-          <span>Генерация...</span>
+        <div id="agent-activity-bar" class="agent-activity-bar hidden" role="status" aria-live="polite">
+          <div class="aab-left">
+            <span class="aab-pulse" aria-hidden="true"></span>
+            <span class="aab-text" id="aab-text">Подготовка...</span>
+          </div>
+          <div class="aab-middle" id="aab-tool"></div>
+          <div class="aab-right">
+            <span id="aab-files" class="aab-counter hidden" title="Файлов изменено"><i data-lucide="file-edit"></i><span id="aab-files-n">0</span></span>
+            <span id="aab-tokens" class="aab-counter hidden" title="Токены последнего запроса"><i data-lucide="zap"></i><span id="aab-tokens-n">0</span></span>
+          </div>
         </div>
-        <div id="current-action" class="current-action hidden">
-          <i data-lucide="loader-2" class="action-spinner"></i>
+        <div id="chat-gen-indicator" class="chat-gen-indicator hidden" hidden></div>
+        <div id="current-action" class="current-action hidden" hidden>
           <span id="current-action-text"></span>
         </div>
         <div class="chat-input-area">
@@ -146,12 +207,28 @@
           </div>
           <div class="input-actions-row">
             <div class="input-actions-left">
-              <div class="chat-model-select-wrap" title="Модель ИИ для этого чата">
-                <i data-lucide="sparkles" style="width:11px;height:11px;color:var(--text-muted);"></i>
-                <select id="chat-model-select" class="chat-model-select"></select>
-                <button id="btn-toggle-favorite-model" class="ghost-btn tiny" title="Закрепить модель" style="padding: 2px 4px; display: flex; align-items: center; justify-content: center; height: 18px; width: 18px; margin-left: 2px;"><i data-lucide="star" style="width: 12px; height: 12px;"></i></button>
+              <div class="chat-model-picker" id="chat-model-picker" title="Модель ИИ для этого чата">
+                <button class="chat-model-picker-trigger" id="chat-model-picker-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <i data-lucide="sparkles" class="chat-model-picker-icon"></i>
+                  <span class="chat-model-picker-label" id="chat-model-picker-label">—</span>
+                  <span class="chat-model-picker-meta" id="chat-model-picker-meta"></span>
+                  <i data-lucide="chevron-down" class="chat-model-picker-chevron"></i>
+                </button>
+                <select id="chat-model-select" class="chat-model-select-hidden" aria-hidden="true" tabindex="-1"></select>
+                <div class="chat-model-picker-panel hidden" id="chat-model-picker-panel" role="listbox">
+                  <div class="chat-model-picker-search-row">
+                    <i data-lucide="search" class="chat-model-picker-search-icon"></i>
+                    <input type="text" class="chat-model-picker-search" id="chat-model-picker-search" placeholder="Поиск модели..." autocomplete="off" />
+                  </div>
+                  <div class="chat-model-picker-tabs" id="chat-model-picker-tabs" role="tablist">
+                    <button class="chat-model-picker-tab active" data-tab="all" role="tab" aria-selected="true">Все <span class="chat-model-picker-count" data-count="all">0</span></button>
+                    <button class="chat-model-picker-tab" data-tab="free" role="tab" aria-selected="false">Бесплатные <span class="chat-model-picker-count" data-count="free">0</span></button>
+                    <button class="chat-model-picker-tab" data-tab="favorites" role="tab" aria-selected="false">★ Избранные <span class="chat-model-picker-count" data-count="favorites">0</span></button>
+                  </div>
+                  <div class="chat-model-picker-list" id="chat-model-picker-list" role="listbox"></div>
+                  <div class="chat-model-picker-footer" id="chat-model-picker-footer"></div>
+                </div>
               </div>
-              <div class="favorite-models-pills" id="favorite-models-pills"></div>
               <div class="context-bar-wrap" id="context-bar-wrap">
                 <span class="context-bar-label" id="context-bar-label">0 / 128K</span>
                 <div class="context-bar-track"><div class="context-bar-fill" id="context-bar-fill"></div></div>
@@ -189,6 +266,42 @@
 
       <!-- Preview Panel -->
       <section class="preview-panel">
+        <aside class="lowcode-context-panel" aria-label="Контекст проекта">
+          <div class="lowcode-context-header">
+            <span>Контекст</span>
+            <button class="agentic-icon-btn" id="btn-lowcode-context-refresh" title="Обновить контекст" aria-label="Обновить контекст"><i data-lucide="refresh-cw"></i></button>
+          </div>
+          
+          <div class="lowcode-context-placeholder hidden" id="lowcode-context-placeholder">
+            <i data-lucide="folder-open"></i>
+            <span>Папка проекта не выбрана</span>
+            <button class="agentic-context-btn" id="btn-context-select-folder" style="margin-top: 10px;">
+              <i data-lucide="folder-open"></i>
+              <span>Выбрать папку</span>
+            </button>
+          </div>
+
+          <div class="lowcode-context-content" id="lowcode-context-content">
+            <div class="lowcode-context-grid">
+              <div class="lowcode-context-stat"><strong id="lowcode-context-files">0</strong><span>файлов</span></div>
+              <div class="lowcode-context-stat"><strong id="lowcode-context-pages">0</strong><span>страниц</span></div>
+              <div class="lowcode-context-stat"><strong id="lowcode-context-api">0</strong><span>API</span></div>
+              <div class="lowcode-context-stat"><strong id="lowcode-context-db">0</strong><span>БД</span></div>
+            </div>
+            <div class="lowcode-context-list">
+              <button class="lowcode-context-row" id="context-row-files" type="button"><i data-lucide="files"></i><span>Файлы</span><strong id="lowcode-context-files-detail">0</strong></button>
+              <button class="lowcode-context-row" id="context-row-db" type="button"><i data-lucide="database"></i><span>Источники данных</span><strong id="lowcode-context-data-detail">0</strong></button>
+              <button class="lowcode-context-row" id="context-row-api" type="button"><i data-lucide="plug"></i><span>Интеграции</span><strong id="lowcode-context-integrations-detail">0</strong></button>
+              <button class="lowcode-context-row" id="context-row-env" type="button"><i data-lucide="key-round"></i><span>Переменные окружения</span><strong id="lowcode-context-env-detail">0</strong></button>
+              <button class="lowcode-context-row" id="context-row-deploy" type="button"><i data-lucide="rocket"></i><span>Деплой</span><strong>нет</strong></button>
+            </div>
+          </div>
+
+          <button class="lowcode-context-expand" id="btn-lowcode-context-expand" type="button">
+            <span>Показать детали</span>
+            <i data-lucide="chevron-down"></i>
+          </button>
+        </aside>
         <div class="preview-toolbar">
           <div class="preview-tabs">
             <button id="tab-preview" class="ptab active" data-tab="preview" title="Просмотр сгенерированного HTML-приложения"><i data-lucide="eye"></i> Превью</button>
@@ -348,7 +461,7 @@
           <button class="settings-nav-btn" data-section="about"><i data-lucide="info"></i> О программе</button>
         </div>
         <div class="settings-sidebar-footer">
-          <span class="settings-version">7/24 IDE v1.3.7</span>
+          <span class="settings-version" id="settings-version">7/24 IDE</span>
         </div>
       </nav>
 
@@ -829,7 +942,7 @@
               <div class="logo-icon large"><i data-lucide="sparkles"></i></div>
               <div>
                 <h3>7/24 IDE</h3>
-                <span>v1.3.7</span>
+                <span id="about-version">v1.3.7</span>
               </div>
             </div>
             <p>7/24 IDE — автономный локальный ИИ-ассистент разработчика. Автоматически читает файлы, вносит изменения, запускает сборку и тестирует приложения в реальном времени.</p>

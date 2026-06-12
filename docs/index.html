@@ -6,9 +6,16 @@
   <title>7/24 IDE — Autonomous Local AI Developer for Windows</title>
   
   <!-- SEO Metadata -->
-  <meta name="description" content="Build applications, fix bugs, and run terminal commands on your PC using an autonomous AI agent. 7/24 IDE is a secure local workspace with auto-checkpoints and a live preview.">
-  <meta name="keywords" content="7/24 IDE, AI coding agent, AI developer, artificial intelligence, Windows IDE, AI programmer, OpenRouter, Claude, GPT, autonomous coding">
+  <meta name="description" content="7/24 IDE is an autonomous, local AI coding agent for Windows. Plan & Build modes, real terminal execution, Monaco diff reviews, auto-checkpoints, a native Rust engine for AST parsing & code search, Ollama offline mode and MCP tools — all in your own project folder.">
+  <meta name="keywords" content="7/24 IDE, AI coding agent, AI developer, autonomous coding, Windows IDE, AI pair programmer, OpenRouter, Ollama, Claude, GPT, MCP, tree-sitter, local AI, code generation">
   <meta name="author" content="strmax195-hue">
+
+  <!-- Open Graph / Social -->
+  <meta property="og:title" content="7/24 IDE — Autonomous Local AI Developer">
+  <meta property="og:description" content="Describe a task, approve a plan, and let an autonomous agent edit files, run commands and verify results — locally, with full control.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/social-preview-light.png">
+  <meta name="theme-color" content="#18181b">
   
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -37,6 +44,7 @@
       
       <ul class="nav-links">
         <li><a href="#features" class="nav-link">Features</a></li>
+        <li><a href="#modes" class="nav-link">Plan & Build</a></li>
         <li><a href="#simulator" class="nav-link">How It Works</a></li>
         <li><a href="#safety" class="nav-link">Safety & Privacy</a></li>
         <li><a href="#quickstart" class="nav-link">Quick Start</a></li>
@@ -44,7 +52,7 @@
       
       <div class="nav-actions">
         <a href="https://github.com/strmax195-hue/7-24-IDE/releases/latest" class="btn-primary btn-nav-download" id="nav-download-link">
-          <i data-lucide="download"></i><span>Download v1.4.0</span>
+          <i data-lucide="download"></i><span>Download v1.5.0</span>
         </a>
       </div>
     </div>
@@ -55,21 +63,21 @@
     <div class="hero-container">
       <div class="hero-badge">
         <i data-lucide="sparkles"></i>
-        <span>Release v1.4.0 is now available for download</span>
+        <span>Release v1.5.0 — native engine, redesigned chat & smart model picker</span>
       </div>
       
       <h1 class="hero-title">Ship local software with<br><span class="gradient-text">an autonomous AI developer</span></h1>
       
       <p class="hero-subtitle">
-        7/24 IDE is a complete, local workspace for Windows. Describe your task in chat, review reasoning and diffs, let the agent edit files, run commands, and inspect the result in a live preview without leaving your project folder.
+        7/24 IDE is a complete, local workspace for Windows. Describe a task in chat, switch between <strong>Plan</strong> and <strong>Build</strong> modes, review the agent's reasoning and diffs, let it edit files and run commands, and watch the result in a live preview — all inside your own project folder.
       </p>
       
       <div class="hero-ctas">
-        <a href="https://github.com/strmax195-hue/7-24-IDE/releases/download/v1.4.0/7-24-IDE-Setup-1.4.0.exe" class="btn-primary btn-large" id="hero-download-btn">
+        <a href="https://github.com/strmax195-hue/7-24-IDE/releases/latest" class="btn-primary btn-large" id="hero-download-btn">
           <i data-lucide="download"></i>
           <div>
             <span class="btn-title">Download for Windows</span>
-            <span class="btn-subtitle">v1.4.0 · EXE Installer</span>
+            <span class="btn-subtitle">v1.5.0 · EXE Installer & Portable</span>
           </div>
         </a>
         <a href="https://github.com/strmax195-hue/7-24-IDE" target="_blank" class="btn-secondary btn-large">
@@ -104,46 +112,111 @@
       </div>
       
       <div class="features-grid">
-        <!-- Feature 1: Real Commands -->
+        <!-- Plan & Build -->
+        <div class="feature-card" id="feat-modes">
+          <div class="feature-icon"><i data-lucide="map"></i></div>
+          <h3>Plan & Build Modes</h3>
+          <p>In Build mode the agent edits code right away. In Plan mode it drafts a step-by-step checklist, then executes each step with an isolated micro-agent in a shadow workspace — with live progress tracking.</p>
+        </div>
+
+        <!-- Native Rust Engine -->
+        <div class="feature-card" id="feat-engine">
+          <div class="feature-icon"><i data-lucide="cpu"></i></div>
+          <h3>Native Rust Engine</h3>
+          <p>An optional bundled Rust core parses real Tree-sitter syntax trees (Rust, TS/JS, Python, HTML, CSS) and ranks workspace code search with BM25. Falls back gracefully to TypeScript when the binary isn't present.</p>
+        </div>
+
+        <!-- Real Commands -->
         <div class="feature-card" id="feat-terminal">
           <div class="feature-icon"><i data-lucide="terminal"></i></div>
           <h3>xterm Terminal with Stdin</h3>
-          <p>The agent can run compilers, install libraries, answer interactive prompts through stdin, and stop long-running commands directly in your project folder.</p>
+          <p>The agent runs compilers, installs libraries, answers interactive prompts via stdin, and can stop long-running commands. Output streams live both into chat and a full terminal panel.</p>
         </div>
         
-        <!-- Feature 2: Safety -->
+        <!-- Safety / Diff -->
         <div class="feature-card" id="feat-safety">
           <div class="feature-icon"><i data-lucide="shield-check"></i></div>
-          <h3>Monaco Diff & Safety Control</h3>
-          <p>Inspect code changes side-by-side in a fullscreen Monaco diff modal before writing. Customize permission rules for writes, reads, and commands.</p>
+          <h3>Monaco Diff & Permissions</h3>
+          <p>Review every change side-by-side in a fullscreen Monaco diff before it touches disk. Per-operation permission rules (auto / ask / deny) for reads, writes and commands keep you in control.</p>
         </div>
-        
-        <!-- Feature 3: Visual Snapshots -->
+
+        <!-- Snapshots -->
         <div class="feature-card" id="feat-history">
           <div class="feature-icon"><i data-lucide="history"></i></div>
-          <h3>2026-Ready Agent Chat</h3>
-          <p>Reasoning models stream collapsible thought blocks, while resilient tool parsing keeps read/write/command actions working even when models vary XML quote styles.</p>
+          <h3>Auto-Checkpoints & Snapshots</h3>
+          <p>A silent snapshot is taken before every agent run. Roll the entire project back to any point in one click from the Snapshots tab — your safety net for fearless iteration.</p>
         </div>
 
-        <!-- Feature 4: Ollama Offline -->
+        <!-- Self-evolving skills -->
+        <div class="feature-card" id="feat-skills">
+          <div class="feature-icon"><i data-lucide="brain-circuit"></i></div>
+          <h3>Self-Evolving Skills</h3>
+          <p>After a successful build the agent reflects on the session and compiles reusable skills that auto-activate on similar future tasks — so it gets faster and more consistent over time.</p>
+        </div>
+
+        <!-- Model picker -->
+        <div class="feature-card" id="feat-models">
+          <div class="feature-icon"><i data-lucide="sparkles"></i></div>
+          <h3>Smart Model Picker</h3>
+          <p>Search hundreds of OpenRouter models with FREE badges, context-window and price labels, and pin favorites. Configure a fallback model for transient provider failures.</p>
+        </div>
+
+        <!-- Ollama Offline -->
         <div class="feature-card" id="feat-ollama">
-          <div class="feature-icon"><i data-lucide="cpu"></i></div>
+          <div class="feature-icon"><i data-lucide="wifi-off"></i></div>
           <h3>Ollama Offline Mode</h3>
-          <p>Run private AI builds locally on your machine. Select Ollama in settings, fetch local tags, and tune context size for offline work.</p>
+          <p>Run fully private, offline builds. Select Ollama in settings, point it at your local API, fetch local models and tune the context window (num_ctx) — no cloud required.</p>
         </div>
 
-        <!-- Feature 5: MCP Extensibility -->
+        <!-- MCP -->
         <div class="feature-card" id="feat-mcp">
           <div class="feature-icon"><i data-lucide="pocket"></i></div>
           <h3>MCP Tool Extensions</h3>
-          <p>Connect databases, search engines, web readers, or development tools as standard stdio JSON-RPC MCP servers directly inside settings.</p>
+          <p>Connect databases, search engines, web readers or formatters as standard stdio JSON-RPC MCP servers directly from settings — extending what the agent can do.</p>
         </div>
 
-        <!-- Feature 6: Privacy First -->
+        <!-- Reasoning chat -->
+        <div class="feature-card" id="feat-chat">
+          <div class="feature-icon"><i data-lucide="messages-square"></i></div>
+          <h3>2026-Ready Reasoning Chat</h3>
+          <p>Collapsible reasoning blocks, clean tool-call cards, anti-truncation auto-continue, image paste & drag-drop, conversation branching, and one-click "Run" on code blocks.</p>
+        </div>
+
+        <!-- Git -->
+        <div class="feature-card" id="feat-git">
+          <div class="feature-icon"><i data-lucide="git-commit"></i></div>
+          <h3>Smart Git Auto-Commits</h3>
+          <p>Optionally stage and commit after each plan step with AI-generated messages. Verify or edit the message before it lands, and customize the commit prefix.</p>
+        </div>
+
+        <!-- Private & local -->
         <div class="feature-card" id="feat-privacy">
           <div class="feature-icon"><i data-lucide="lock"></i></div>
-          <h3>Fallbacks, Commits & Updates</h3>
-          <p>Use fallback models, verify AI-generated Git commits, and install GitHub release updates from the app when a new version is available.</p>
+          <h3>Private, Local & Localized</h3>
+          <p>Projects, chats and snapshots stay on your machine. Your API key is encrypted with the OS keychain (Windows DPAPI). Full interface available in English, Russian and Chinese.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ PLAN & BUILD MODES SECTION ═══════════ -->
+  <section class="features-section" id="modes" style="background: transparent;">
+    <div class="section-container">
+      <div class="section-header">
+        <h2 class="section-title">Two Ways to Work: Plan or Build</h2>
+        <p class="section-subtitle">Pick the right level of autonomy for the task. Quick fix? Build mode. Whole feature from scratch? Plan mode breaks it into verifiable steps.</p>
+      </div>
+
+      <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));">
+        <div class="feature-card">
+          <div class="feature-icon"><i data-lucide="zap"></i></div>
+          <h3>Build Mode — direct & fast</h3>
+          <p>The agent reads your files, writes precise edits and runs commands immediately. A live activity bar shows what it's doing, which files changed, and token usage in real time. Best for fixes, refactors and incremental changes.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i data-lucide="list-checks"></i></div>
+          <h3>Plan Mode — structured & safe</h3>
+          <p>The agent first proposes a step-by-step plan you can edit and approve. Each step runs in an isolated micro-agent inside a shadow workspace, merged only on success. A sticky progress bar and Tasks tab track every step, with self-healing on build errors.</p>
         </div>
       </div>
     </div>
@@ -311,15 +384,15 @@
         <!-- Step 3 -->
         <div class="step-card">
           <div class="step-num">3</div>
-          <h4>Add OpenRouter Key</h4>
-          <p>Paste your OpenRouter API key in settings, pick your preferred AI model, and start building!</p>
+          <h4>Connect a Model</h4>
+          <p>Paste an OpenRouter API key for cloud models, or point to a local Ollama endpoint for fully offline work. Pick your model and start building.</p>
         </div>
       </div>
 
       <div class="quickstart-cta">
-        <a href="https://github.com/strmax195-hue/7-24-IDE/releases/download/v1.4.0/7-24-IDE-Setup-1.4.0.exe" class="btn-primary btn-large">
+        <a href="https://github.com/strmax195-hue/7-24-IDE/releases/latest" class="btn-primary btn-large">
           <i data-lucide="download"></i>
-          <span>Download 7/24 IDE Installer</span>
+          <span>Download 7/24 IDE v1.5.0</span>
         </a>
       </div>
     </div>
@@ -341,8 +414,10 @@
           <h5>Resources</h5>
           <ul>
             <li><a href="https://github.com/strmax195-hue/7-24-IDE" target="_blank">GitHub Repository</a></li>
-            <li><a href="https://github.com/strmax195-hue/7-24-IDE/releases" target="_blank">Releases List</a></li>
+            <li><a href="https://github.com/strmax195-hue/7-24-IDE/releases" target="_blank">Releases & Changelog</a></li>
+            <li><a href="https://github.com/strmax195-hue/7-24-IDE/releases/latest" target="_blank">Download Latest</a></li>
             <li><a href="https://openrouter.ai" target="_blank">OpenRouter API</a></li>
+            <li><a href="https://ollama.com" target="_blank">Ollama (Offline)</a></li>
           </ul>
         </div>
       </div>

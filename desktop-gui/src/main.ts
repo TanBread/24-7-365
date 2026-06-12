@@ -4,9 +4,54 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as childProcess from 'child_process';
 import { McpClient } from './lib/mcp';
+import { CoreEngineClient, findCoreBinary } from './lib/coreEngine';
 
 let activeProcesses: Map<string, childProcess.ChildProcess> = new Map();
 let activeMcpClients: Map<string, McpClient> = new Map();
+let coreEngine: CoreEngineClient | null = null;
+let coreEngineStartPromise: Promise<void> | null = null;
+let coreEngineFailureReason: string | null = null;
+
+async function ensureCoreEngine(): Promise<CoreEngineClient | null> {
+  // Already running.
+  if (coreEngine && coreEngine.isReady) return coreEngine;
+  // A previous start attempt is in flight.
+  if (coreEngineStartPromise) {
+    try {
+      await coreEngineStartPromise;
+      return coreEngine && coreEngine.isReady ? coreEngine : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const binary = findCoreBinary(__dirname, process.resourcesPath);
+  if (!binary) {
+    coreEngineFailureReason = 'binary not found';
+    console.log('[core-backend] no native binary found — falling back to TS implementations');
+    return null;
+  }
+  console.log(`[core-backend] starting native engine: ${binary}`);
+  const client = new CoreEngineClient(binary);
+  coreEngine = client;
+  coreEngineStartPromise = client
+    .start()
+    .then(() => {
+      coreEngineFailureReason = null;
+      console.log(`[core-backend] ready (v${client.version})`);
+    })
+    .catch((err) => {
+      coreEngineFailureReason = err?.message || String(err);
+      console.warn('[core-backend] start failed:', coreEngineFailureReason);
+      coreEngine = null;
+    })
+    .finally(() => {
+      // Allow future ensure() calls to retry after a clean stop.
+      if (!coreEngine) coreEngineStartPromise = null;
+    });
+  await coreEngineStartPromise;
+  return coreEngine && coreEngine.isReady ? coreEngine : null;
+}
 
 async function reinitMcpServers(servers: any[]) {
   // Stop all active servers
@@ -220,11 +265,35 @@ ipcMain.handle('select-folder', async () => {
 });
 
 // Recursively list files in directory (excluding node_modules, .git, etc.)
-async function getFilesRecursively(dir: string, baseDir: string): Promise<{ path: string; isDir: boolean; size: number }[]> {
+// Guarded against symlink loops (via a visited realpath set) and runaway
+// trees (depth + total file caps) so a malicious/huge repo can't hang the app.
+async function getFilesRecursively(
+  dir: string,
+  baseDir: string,
+  depth: number = 0,
+  visited: Set<string> = new Set(),
+  counter: { n: number } = { n: 0 },
+): Promise<{ path: string; isDir: boolean; size: number }[]> {
   let files: { path: string; isDir: boolean; size: number }[] = [];
+
+  const MAX_DEPTH = 25;
+  const MAX_FILES = 20000;
+  if (depth > MAX_DEPTH || counter.n >= MAX_FILES) return files;
+
+  // Resolve symlinks to a canonical path and bail if we've seen it (cycle).
+  let realDir: string;
+  try {
+    realDir = await fs.promises.realpath(dir);
+  } catch {
+    return files;
+  }
+  if (visited.has(realDir)) return files;
+  visited.add(realDir);
+
   const entries = await fs.promises.readdir(dir, { withFileTypes: true });
 
   for (const entry of entries) {
+    if (counter.n >= MAX_FILES) break;
     const fullPath = path.join(dir, entry.name);
     const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
 
@@ -245,8 +314,9 @@ async function getFilesRecursively(dir: string, baseDir: string): Promise<{ path
 
     if (entry.isDirectory()) {
       files.push({ path: relativePath, isDir: true, size: 0 });
+      counter.n++;
       try {
-        const subFiles = await getFilesRecursively(fullPath, baseDir);
+        const subFiles = await getFilesRecursively(fullPath, baseDir, depth + 1, visited, counter);
         files = files.concat(subFiles);
       } catch (err) {
         // Skip folders that throw permissions/read errors
@@ -255,6 +325,7 @@ async function getFilesRecursively(dir: string, baseDir: string): Promise<{ path
       try {
         const stat = await fs.promises.stat(fullPath);
         files.push({ path: relativePath, isDir: false, size: stat.size });
+        counter.n++;
       } catch (err) {}
     }
   }
@@ -319,6 +390,31 @@ ipcMain.handle('write-file', async (_event, filePath: string, content: string, w
     throw err;
   }
   return true;
+});
+
+// Delete a file (path-checked, cross-platform). Used for temp cleanup.
+ipcMain.handle('get-app-version', () => {
+  try { return app.getVersion(); } catch { return ''; }
+});
+
+ipcMain.handle('delete-file', async (_event, filePath: string, workspacePath: string) => {
+  try {
+    const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(workspacePath, filePath);
+    const resolvedPath = path.resolve(absolutePath);
+    const resolvedWorkspace = path.resolve(workspacePath);
+    const rel = path.relative(resolvedWorkspace, resolvedPath);
+    // Always enforce containment for deletion — never delete outside the workspace.
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error(`Access Denied: Path is outside the workspace: ${resolvedPath}`);
+    }
+    if (fs.existsSync(resolvedPath)) {
+      await fs.promises.unlink(resolvedPath);
+    }
+    return true;
+  } catch (err) {
+    console.warn('delete-file failed:', err);
+    return false;
+  }
 });
 
 // Helper to recursively copy directories (async)
@@ -423,7 +519,7 @@ ipcMain.handle('exec-command', async (_event, command: string, workspacePath: st
       return;
     }
 
-    childProcess.exec(command, { cwd: workspacePath, timeout: 180000 }, (error, stdout, stderr) => {
+    childProcess.exec(command, { cwd: workspacePath, timeout: 180000, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
       resolve({
         code: error ? (error.code || 1) : 0,
         stdout: stdout || '',
@@ -466,8 +562,14 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
     const timer = setTimeout(() => {
       if (!settled) {
         send('system', '\n⏱️ Превышено время ожидания (180с). Процесс остановлен.\n');
-        activeProcesses.delete(execId);
-        try { child.kill(); } catch {}
+        try {
+          if (process.platform === 'win32' && child.pid) {
+            childProcess.exec(`taskkill /pid ${child.pid} /t /f`);
+          } else {
+            child.kill('SIGTERM');
+          }
+        } catch {}
+        // The 'close' handler below will resolve the promise and clean up.
       }
     }, 180000);
 
@@ -577,6 +679,92 @@ ipcMain.handle('mcp-call-tool', async (_event, serverName: string, toolName: str
   } catch (err: any) {
     console.error(`Failed to call tool "${toolName}" on server "${serverName}":`, err);
     throw err;
+  }
+});
+
+// ─── Native core-backend (Rust AST + BM25) IPC ───────────────────────────────
+ipcMain.handle('core-status', async () => {
+  const engine = await ensureCoreEngine();
+  if (!engine) {
+    return { available: false, reason: coreEngineFailureReason || 'unavailable' };
+  }
+  try {
+    const status = await engine.status();
+    return {
+      available: true,
+      version: status.version,
+      files: status.files,
+      docs: status.docs,
+      languages: engine.supportedAstLanguages,
+    };
+  } catch (err: any) {
+    return { available: false, reason: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('core-parse-ast', async (_event, code: string, ext: string) => {
+  const engine = await ensureCoreEngine();
+  if (!engine) return null;
+  try {
+    return await engine.parseAst(code, ext);
+  } catch (err: any) {
+    console.warn('[core-backend] parse_ast failed:', err?.message || err);
+    return null;
+  }
+});
+
+ipcMain.handle('core-index-file', async (_event, filePath: string, content: string) => {
+  const engine = await ensureCoreEngine();
+  if (!engine) return null;
+  try {
+    return await engine.indexFile(filePath, content);
+  } catch (err: any) {
+    console.warn('[core-backend] index_file failed:', err?.message || err);
+    return null;
+  }
+});
+
+ipcMain.handle('core-index-files', async (_event, files: { file_path: string; content: string }[]) => {
+  const engine = await ensureCoreEngine();
+  if (!engine) return null;
+  try {
+    return await engine.indexFiles(files);
+  } catch (err: any) {
+    console.warn('[core-backend] index_files failed:', err?.message || err);
+    return null;
+  }
+});
+
+ipcMain.handle('core-remove-file', async (_event, filePath: string) => {
+  const engine = await ensureCoreEngine();
+  if (!engine) return null;
+  try {
+    return await engine.removeFile(filePath);
+  } catch (err: any) {
+    console.warn('[core-backend] remove_file failed:', err?.message || err);
+    return null;
+  }
+});
+
+ipcMain.handle('core-search-rag', async (_event, query: string, limit?: number) => {
+  const engine = await ensureCoreEngine();
+  if (!engine) return null;
+  try {
+    return await engine.searchRag(query, limit ?? 20);
+  } catch (err: any) {
+    console.warn('[core-backend] search_rag failed:', err?.message || err);
+    return null;
+  }
+});
+
+ipcMain.handle('core-clear-index', async () => {
+  const engine = await ensureCoreEngine();
+  if (!engine) return null;
+  try {
+    return await engine.clearIndex();
+  } catch (err: any) {
+    console.warn('[core-backend] clear_index failed:', err?.message || err);
+    return null;
   }
 });
 
@@ -762,6 +950,9 @@ ipcMain.handle('window-is-maximized', () => {
 app.whenReady().then(() => {
   createWindow();
   setupAutoUpdater();
+  // Kick off the native engine in the background — failure is non-fatal,
+  // the renderer will use TS fallbacks if it never becomes ready.
+  ensureCoreEngine().catch(() => {});
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -831,6 +1022,23 @@ app.on('before-quit', () => {
   for (const client of activeMcpClients.values()) {
     try { client.stop(); } catch {}
   }
+  if (coreEngine) {
+    try { coreEngine.stop(); } catch {}
+    coreEngine = null;
+  }
+  // Terminate any running terminal child processes so they don't get orphaned.
+  for (const [execId, child] of activeProcesses.entries()) {
+    try {
+      if (process.platform === 'win32' && child.pid) {
+        childProcess.exec(`taskkill /pid ${child.pid} /t /f`);
+      } else {
+        child.kill('SIGTERM');
+      }
+    } catch (err) {
+      console.warn(`[quit] failed to kill process ${execId}:`, err);
+    }
+  }
+  activeProcesses.clear();
 });
 
 app.on('window-all-closed', () => {

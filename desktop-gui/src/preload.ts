@@ -15,6 +15,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeFile: (filePath: string, content: string, workspacePath: string, sandbox: boolean) =>
     ipcRenderer.invoke('write-file', filePath, content, workspacePath, sandbox),
 
+  // Delete a file (path-checked, used for temp cleanup)
+  deleteFile: (filePath: string, workspacePath: string) =>
+    ipcRenderer.invoke('delete-file', filePath, workspacePath),
+
+  // App version (for the Settings/About labels)
+  getAppVersion: () => ipcRenderer.invoke('get-app-version') as Promise<string>,
+
   // Shadow workspace operations
   prepareShadowWorkspace: (workspacePath: string) =>
     ipcRenderer.invoke('prepare-shadow-workspace', workspacePath),
@@ -111,5 +118,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('mcp-list-tools') as Promise<any[]>,
   mcpCallTool: (serverName: string, toolName: string, args: any) =>
     ipcRenderer.invoke('mcp-call-tool', serverName, toolName, args) as Promise<any>,
+
+  // Native core-backend (Rust AST + BM25) — methods return null when the
+  // native engine is unavailable, so callers can fall back to TS implementations.
+  coreStatus: () =>
+    ipcRenderer.invoke('core-status') as Promise<{
+      available: boolean;
+      version?: string;
+      files?: number;
+      docs?: number;
+      languages?: string[];
+      reason?: string;
+    }>,
+  coreParseAst: (code: string, ext: string) =>
+    ipcRenderer.invoke('core-parse-ast', code, ext) as Promise<{
+      status: 'success' | 'skipped' | 'error';
+      language: string;
+      nodes_count: number;
+      nodes: { name: string; node_type: string; line_start: number; line_end: number }[];
+    } | null>,
+  coreIndexFile: (filePath: string, content: string) =>
+    ipcRenderer.invoke('core-index-file', filePath, content) as Promise<{ status: string; chunks: number } | null>,
+  coreIndexFiles: (files: { file_path: string; content: string }[]) =>
+    ipcRenderer.invoke('core-index-files', files) as Promise<{ files_indexed: number; chunks: number } | null>,
+  coreRemoveFile: (filePath: string) =>
+    ipcRenderer.invoke('core-remove-file', filePath) as Promise<{ status: string; removed: boolean } | null>,
+  coreSearchRag: (query: string, limit?: number) =>
+    ipcRenderer.invoke('core-search-rag', query, limit) as Promise<{
+      status: 'success';
+      query: string;
+      results_count: number;
+      results: { file_path: string; line_start: number; line_end: number; chunk_content: string; score: number }[];
+    } | null>,
+  coreClearIndex: () =>
+    ipcRenderer.invoke('core-clear-index') as Promise<{ status: string } | null>,
 });
 

@@ -1,11 +1,37 @@
 [package]
 name = "core-backend"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2021"
+description = "Native AST + BM25 search engine for 7/24 IDE"
+license = "MIT"
+
+[[bin]]
+name = "core-backend"
+path = "src/main.rs"
 
 [dependencies]
-tokio = { version = "1.28", features = ["full", "io-std", "io-util"] }
+# Async runtime for stdio JSON-RPC over stdin/stdout
+tokio = { version = "1.36", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync"] }
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# Note: tree-sitter and lancedb are specified in the tech stack.
-# We will scaffold the integrations cleanly in src/.
+
+# Tree-sitter syntax tree extraction
+# Parser core
+tree-sitter = "0.22"
+# Language grammars compiled in-tree (no system deps required at runtime)
+tree-sitter-rust       = "0.21"
+tree-sitter-typescript = "0.21"
+tree-sitter-javascript = "0.21"
+tree-sitter-python     = "0.21"
+tree-sitter-html       = "0.20"
+tree-sitter-css        = "0.21"
+tree-sitter-json       = "0.21"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"

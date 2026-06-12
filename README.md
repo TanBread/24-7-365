@@ -1,98 +1,128 @@
-# <img src="icon.png" width="40" height="40" align="center" /> 7/24 IDE
+<div align="center">
+
+# <img src="icon.png" width="44" height="44" align="center" /> 7/24 IDE
+
+### **Always On. Always Coding.**
+
+**An autonomous, local AI developer agent for Windows.**
+Describe what you want — it reads your files, writes precise edits, runs commands, and shows you a live preview, all inside your own project folder.
+
+[![Download](https://img.shields.io/badge/Download-v1.5.0-18181b?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
+[![License](https://img.shields.io/badge/License-MIT-3f3f46?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
 
 ![7/24 IDE Social Preview](social-preview-light.png)
 
-### **Always On. Always Coding.**
-Build software, fix bugs, and run commands on your local machine using an autonomous AI developer agent that actually does the work for you.
+</div>
 
 ---
 
-## **Why 7/24 IDE?**
+## Why 7/24 IDE?
 
-We all love building, but the execution can be tedious. Standard AI chats force you to copy-paste code blocks continuously. Sandbox coding spaces restrict you to tiny web applications, making it impossible to install native packages or run complex backends. 
+Standard AI chats make you copy-paste code blocks endlessly. Browser sandboxes trap you in tiny web demos with no way to install native packages or run real backends.
 
-**7/24 IDE changes that.** 
+**7/24 IDE is different.** It's a focused, local workspace built around an autonomous developer agent. You describe a task; the agent reads your files, makes precise modifications, runs install/build scripts, and renders a live preview — like a junior developer working directly in your project folder, 24/7.
 
-Instead of a generic chat window, it is a focused, local workspace built around an autonomous developer agent. You describe what you want, and the agent reads your files, writes precise modifications, runs install and build scripts, and shows you a live visual preview. 
-
-It is like having a junior developer working directly in your project folder, 24 hours a day, 7 days a week.
+Everything runs **locally**. Your code, chats, settings and snapshots never leave your machine.
 
 ---
 
-## **Key Benefits**
+## Plan & Build — two ways to work
 
-### 🚀 **Real Tools, Real Execution**
-Unlike browser sandboxes, 7/24 IDE works on your real local folders. The agent can run compiler scripts, run `npm install`, compile Rust, or execute backend tests. If it can run in your terminal, the agent can use it to build your project.
-
-### 🦙 **Ollama Offline Mode**
-Run completely private, offline builds and checklist executions by selecting the Ollama provider in settings and pointing it to your local Ollama API endpoint (typically `http://localhost:11434`). You can also configure local model context limits (`num_ctx`) directly from the settings panel.
-
-### 🛠️ **Model Context Protocol (MCP)**
-Extend the agent's capabilities by adding external stdio JSON-RPC MCP servers directly from the settings. This lets you connect database inspectors, search engines, web page readers, or code formatters.
-
-### 🛡️ **Safety and Absolute Control**
-Mistakes happen, but they won't break your project:
-*   **Auto-Checkpoints:** The app takes a silent snapshot of your workspace before every agent run. You can roll back the entire project to any point in one click via the *Snapshots* tab.
-*   **Fullscreen Myers Diff:** Before writing code to your disk, review edits in a side-by-side fullscreen diff alignment modal using Myers/LCS line-matching, complete with regex-based syntax highlighting for major languages.
-*   **Permissions Panel:** Set rules for file reads, file writes, and command executions (e.g. Always Ask, Always Allow, or Deny).
-
-### 🤖 **Smart Auto-Commits**
-Enable Git Auto-Commits in Settings to automatically stage files and create Git commits. Choose to verify/edit commit messages before they are created, and customize the commit prefix (defaults to `[AI]`).
-
-### 💬 **Interactive Terminal (Stdin)**
-No more hangs on interactive prompts. Live stream terminal outputs and write directly to standard input (like `[y/n]` prompts, package configurations, or password requests) from the terminal input bar. You can stop/kill active processes at any time and navigate stdin input history using the Up/Down arrow keys.
-
-### 🧠 **2026-Ready Reasoning Chat**
-Use reasoning models without flooding the workspace. The chat renders collapsible reasoning blocks, readable tool call cards, copy actions, search, and Markdown export while preserving the conversation history locally. Tool parsing is tolerant of model quote-style variations, so read/write/command actions keep running instead of leaking raw XML into the chat.
-
-### 🖼️ **Image Paste & Drag-Drop**
-Paste images directly from clipboard (Ctrl+V) or drag-and-drop them into the chat. Images are automatically saved to your workspace and attached as context for the AI agent. Perfect for sharing screenshots, design mockups, or bug reports.
-
-### 🔀 **Conversation Branching**
-Every message has a "Branch" button that creates a new conversation fork with the history up to that point. Experiment freely without losing previous work.
-
-### ▶️ **Run Code from Chat**
-Code blocks in JavaScript, TypeScript, Python, and Shell now have a "Run" button for quick execution directly from the chat. No need to copy-paste into a terminal.
-
-### ⌨️ **Keyboard Shortcuts**
-- `Ctrl+K` — Quick chat search
-- `Ctrl+L` — Clear chat and start new
-- `Ctrl+Shift+M` — Toggle Build/Plan mode
-- `Ctrl+N` — New project
-- `Ctrl+,` — Open Settings
-
-### 🧩 **Monaco Diff Reviews**
-Review proposed edits in a fullscreen Monaco-powered diff viewer before they touch disk, with accurate line alignment and syntax highlighting for large files.
-
-### ⚡ **Instant Feedback Loop**
-See your creations come to life. The app features a live preview panel that displays your HTML, CSS, and JS applications. It only refreshes when relevant files change, ensuring a zero-flicker preview as you build.
-
-### 🔒 **Private and Local**
-Your code belongs to you. All projects, chats, settings, and snapshots are stored locally on your machine (`%APPDATA%\7-24 IDE\`). Your API key is encrypted using the secure OS keychain (Windows DPAPI). No telemetry, no cloud storage, no lock-in.
+| Mode | Best for | How it works |
+|------|----------|--------------|
+| **⚡ Build** | Fixes, refactors, incremental changes | The agent edits files and runs commands immediately. A live activity bar shows what it's doing, which files changed, and token usage. |
+| **🗺️ Plan** | Whole features from scratch | The agent drafts a step-by-step plan you approve. Each step runs in an isolated micro-agent inside a **shadow workspace**, merged only on success, with a sticky progress bar and self-healing on build errors. |
 
 ---
 
-## **Quick Start**
+## Key Features
 
-1.  **Download & Install** the latest installer from the [Releases](../../releases) page (`7-24-IDE-Setup-x.y.z.exe`).
-2.  **Pick a Workspace:** Choose any folder on your computer where you want to build.
-3.  **Add API Key:** Retrieve a key from [OpenRouter](https://openrouter.ai/) and paste it in Settings. This gives you instant access to all major models (Claude 3.5 Sonnet, GPT-4o, Gemini 1.5 Pro, Llama 3, etc.).
-4.  **Start Building:** Type what you want to create (e.g., *"Build a weather app dashboard with search"*), approve the plan, and watch it build.
+### ⚡ Native Rust Engine
+An optional bundled Rust core builds real **Tree-sitter** syntax trees (Rust, TypeScript/TSX, JavaScript/JSX, Python, HTML, CSS, JSON) and ranks workspace code search with **BM25** relevance. The workspace is indexed in the background. If the binary isn't present, the app falls back transparently to its TypeScript implementation — no loss of functionality.
+
+### 🤖 Smart Model Picker
+Search hundreds of OpenRouter models in a clean dropdown with **FREE badges**, context-window and price labels, and tabs for *All / Free / ★ Favorites*. Pin favorites with a single star. Configure a **fallback model** for transient provider failures.
+
+### 🦙 Ollama Offline Mode
+Run fully private, offline builds. Select the Ollama provider, point it at your local endpoint (`http://localhost:11434`), fetch local models and tune the context window (`num_ctx`) — no cloud, no API key.
+
+### 🛠️ Model Context Protocol (MCP)
+Extend the agent with external stdio JSON-RPC MCP servers added straight from settings — database inspectors, search engines, web readers, formatters and more.
+
+### 🛡️ Safety & Absolute Control
+- **Auto-Checkpoints** — a silent snapshot is taken before every agent run; roll the whole project back in one click from the *Snapshots* tab.
+- **Monaco Diff Reviews** — inspect every change side-by-side in a fullscreen diff before it touches disk.
+- **Permissions Panel** — per-operation rules (Always Allow / Ask / Deny) for file reads, writes and command execution.
+- **Folder-Scoped Sandbox** — the agent is locked inside your chosen workspace folder.
+
+### 💬 2026-Ready Reasoning Chat
+Collapsible reasoning blocks, clean tool-call cards, anti-truncation auto-continue, copy & Markdown export, and a readable centered chat column. Tool parsing tolerates model quote-style variations so actions keep running instead of leaking raw XML.
+
+### 🖼️ Image Paste, Branching & Run-from-Chat
+Paste (Ctrl+V) or drag-and-drop images as context. Branch any conversation to experiment without losing history. Run JavaScript/TypeScript/Python/Shell code blocks directly from chat with one click.
+
+### 🤖 Smart Git Auto-Commits
+Optionally stage and commit after each plan step with AI-generated messages. Verify/edit the message before it lands, and customize the prefix (defaults to `[AI]`).
+
+### 🌍 Localized Interface
+Full UI available in **English, Russian and Chinese**.
+
+### ⌨️ Keyboard Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+K` | Quick chat search |
+| `Ctrl+L` | Clear chat / new |
+| `Ctrl+Shift+M` | Toggle Build / Plan |
+| `Ctrl+N` | New project |
+| `Ctrl+,` | Open Settings |
 
 ---
 
-## **Under the Hood (For Tech Enthusiasts)**
+## Quick Start
 
-If you want to know how the magic happens:
-*   **Dual Mode Conversational Workspace:** Switch between **Build mode** (direct edits and fast iterations) and **Plan mode** (the agent generates a step-by-step checklist, which is then verified and executed chunk-by-chunk with isolated contexts).
-*   **Fallback Models and Updater:** Configure a fallback model for transient provider failures and receive GitHub release update prompts inside the desktop app.
-*   **AST Compression:** Files are parsed and compressed using syntax trees so that large files don't consume your entire model context budget.
-*   **Self-Evolving Skills:** After a successful build, the assistant reflects on the conversation history and compiles reusable *skills* (short rule sets) that auto-activate when similar tasks are requested in the future.
-*   **Prompt Caching:** Optimised system prompts for Anthropic models reduce generation latency and lower API costs.
-*   **Atomic Writes:** Code is written to a temporary sibling file and then renamed, preventing any corrupted files due to sudden network drops or process interruptions.
+1. **Download & Install** the latest installer from the [Releases](../../releases/latest) page (`7-24-IDE-Setup-x.y.z.exe`), or grab the portable build.
+2. **Pick a Workspace** — choose any folder on your computer where you want to build.
+3. **Connect a Model** — paste an [OpenRouter](https://openrouter.ai/) API key for cloud models (Claude, GPT-4o, Gemini, Llama, etc.), *or* point to a local [Ollama](https://ollama.com) endpoint for fully offline work.
+4. **Start Building** — describe what you want (e.g. *"Build a weather dashboard with city search"*), pick Build or Plan, and watch it come together.
+
+Your API key is encrypted with the OS keychain (Windows DPAPI). All data lives locally in `%APPDATA%\7-24 IDE\`. No telemetry, no cloud storage, no lock-in.
 
 ---
 
-## **License**
+## Under the Hood
 
-See [LICENSE](LICENSE).
+- **Native Rust Core (`core-backend`):** spawned on startup over JSON-RPC stdio for Tree-sitter AST parsing and BM25 code search. Build it with `cargo build --release` in `core-backend/` — or just `npm run build` in `desktop-gui/`, which auto-detects `cargo` and bundles the binary as `extraResources`. Skipped gracefully if `cargo` is absent.
+- **Dual-mode workspace:** Build (direct edits) and Plan (step-by-step checklist executed by isolated micro-agents in a shadow workspace).
+- **AST compression:** large files are folded to signatures so they don't consume the whole context budget.
+- **Self-evolving skills:** after a successful build the agent reflects on the session and compiles reusable rule sets that auto-activate on similar tasks.
+- **Atomic writes:** files are written to a temp sibling and renamed, preventing corruption on interruption.
+- **Prompt caching:** optimized system prompts for Anthropic models lower latency and cost.
+
+---
+
+## Building from Source
+
+```bash
+# Desktop app (Electron + TypeScript)
+cd desktop-gui
+npm install
+npm run build      # bundles main/preload/renderer + Monaco (+ Rust core if cargo present)
+npm start          # launch the app
+npm test           # run the test suite
+npm run dist       # build the Windows NSIS installer into ../dist-installer
+
+# Native engine (optional, requires Rust toolchain)
+cd core-backend
+cargo build --release
+```
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE).
+
+<div align="center">
+<sub>© 2026 7/24 IDE · Crafted with love and AI.</sub>
+</div>

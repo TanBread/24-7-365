@@ -375,6 +375,7 @@ const DICT: Record<string, [string, string]> = {
   'Микро-агент': ['Micro-agent', '微智能体'],
   'Микро-агент успешно завершил работу. Изменения из теневой песочницы влиты в основной проект.': ['Micro-agent finished successfully. Changes from the shadow sandbox were merged into the main project.', '微智能体成功完成。影子沙箱中的更改已合并到主项目。'],
   'Микро-агент завершился с ошибкой. Изменения в теневой песочнице сброшены.': ['Micro-agent failed. Changes in the shadow sandbox were discarded.', '微智能体失败。影子沙箱中的更改已丢弃。'],
+  'Выполнение шага остановлено пользователем. Изменения в теневой песочнице сброшены.': ['Step execution stopped by user. Changes in the shadow sandbox were discarded.', '用户停止了步骤执行。影子沙箱中的更改已丢弃。'],
   'Проверка планов Агентом-Критиком...': ['Critic agent reviewing the plan...', '评审智能体正在审查计划...'],
   'Агент-Критик: Ревью плана': ['Critic agent: plan review', '评审智能体：计划审查'],
   'Агент-Критик: Ошибка проверки': ['Critic agent: review error', '评审智能体：审查错误'],
@@ -433,6 +434,165 @@ const DICT: Record<string, [string, string]> = {
   'Интерактивный терминал с вводом stdin и отменой команд': ['Interactive terminal with stdin input and process cancellation', '带有 stdin 输入和进程取消的交互式终端'],
   'Умные авто-коммиты в Git с AI-описанием изменений': ['Smart Git auto-commits with AI-generated descriptions', '带有 AI 生成描述的智能 Git 自动提交'],
   'Myers-LCS сравнение исходного и измененного кода с подсветкой': ['Myers-LCS code comparison with syntax highlighting', '带有语法高亮显示的 Myers-LCS 代码对比'],
+
+  // ─── v1.4.2: Model picker, errors, system messages ───
+  'Все': ['All', '全部'],
+  'Все модели': ['All models', '所有模型'],
+  'Бесплатные': ['Free', '免费'],
+  '★ Избранные': ['★ Favorites', '★ 收藏'],
+  'Бесплатная модель': ['Free model', '免费模型'],
+  'Цена prompt-токенов': ['Prompt tokens price', '提示 token 价格'],
+  'токенов контекста': ['context tokens', '上下文 token'],
+  'Добавить в избранное': ['Add to favorites', '添加到收藏'],
+  'Нажмите на ★ рядом с любой моделью, чтобы добавить её в избранное.': ['Click the ★ next to any model to pin it to favorites.', '点击任意模型旁的 ★ 即可加入收藏。'],
+  'По запросу ничего не найдено.': ['No matches.', '没有匹配项。'],
+  'моделей': ['models', '模型'],
+  'из': ['of', '/'],
+  'Не удалось загрузить модели с Ollama': ['Failed to load models from Ollama', '无法从 Ollama 加载模型'],
+  'Неверный или устаревший API-ключ': ['Invalid or expired API key', 'API 密钥无效或已过期'],
+  'Пожалуйста, проверьте ключ в Настройках → Провайдер': ['Please check the key in Settings → Provider', '请在设置 → 提供商中检查密钥'],
+  'Выполнение инструмента...': ['Running tool...', '正在运行工具…'],
+
+// ─── v1.4.2: Action labels + step counter ───
+  '🧠 Планирование...': ['🧠 Planning...', '🧠 规划中…'],
+  '🔧 Выполнение задачи...': ['🔧 Working on the task...', '🔧 正在执行任务…'],
+  '🧠 Генерация ответа...': ['🧠 Generating reply...', '🧠 正在生成回复…'],
+  '⏳ Продолжение генерации...': ['⏳ Continuing generation...', '⏳ 继续生成…'],
+  'Шаг': ['Step', '步骤'],
+
+  // ─── v1.4.2: Operation indicators (showActiveOp) ───
+  '🔍 Поиск компонентов...': ['🔍 Searching components...', '🔍 搜索组件…'],
+  '⚙️ Выполнение...': ['⚙️ Running...', '⚙️ 执行中…'],
+
+  // ─── v1.4.2: Branch / image / code-run system bubbles ───
+  '🔀 Ветка создана. История скопирована до выбранного сообщения.': ['🔀 Branch created. History copied up to the selected message.', '🔀 已创建分支。历史已复制到所选消息。'],
+  '🖼️ Изображение прикреплено к контексту.': ['🖼️ Image attached to context.', '🖼️ 图片已附加到上下文。'],
+  '⚠️ Сначала откройте проект для работы с изображениями.': ['⚠️ Open a project first to work with images.', '⚠️ 请先打开项目以使用图片。'],
+  '⚠️ Рабочая папка не выбрана. Невозможно сохранить изображение.': ['⚠️ Working folder is not selected. Cannot save image.', '⚠️ 未选择工作文件夹，无法保存图片。'],
+  '⚠️ Не удалось сохранить изображение. Попробуйте прикрепить файл через браузер файлов.': ['⚠️ Failed to save image. Try attaching it via the file browser.', '⚠️ 保存图片失败。请尝试通过文件浏览器附加。'],
+  '⚠️ Этот язык не поддерживает быстрое выполнение.': ['⚠️ This language is not supported for quick run.', '⚠️ 此语言不支持快速运行。'],
+  '▶️ Выполнение кода...': ['▶️ Running code...', '▶️ 运行代码…'],
+  'Ошибка выполнения:': ['Run error:', '运行错误：'],
+  '(нет вывода)': ['(no output)', '（无输出）'],
+
+  // ─── v1.4.2: Inline button captions (edit message / snapshot dialog) ───
+  'Создать': ['Create', '创建'],
+  'Сохранить': ['Save', '保存'],
+
+  // ─── v1.4.2: Git status panel ───
+  'Проверка статуса Git...': ['Checking Git status...', '正在检查 Git 状态…'],
+  'Папка не является репозиторием Git': ['Folder is not a Git repository', '文件夹不是 Git 仓库'],
+  'Инициализировать': ['Initialize', '初始化'],
+  'Рабочая копия чиста': ['Working tree is clean', '工作区干净'],
+  'Все изменения зафиксированы.': ['All changes are committed.', '所有更改已提交。'],
+  'Текущая ветка Git': ['Current Git branch', '当前 Git 分支'],
+  'Изменения': ['Changes', '更改'],
+  'Ошибка статуса Git': ['Git status error', 'Git 状态错误'],
+
+  // ─── v1.4.2: Inline message-action titles ───
+  'Прикрепить к контексту': ['Attach to context', '附加到上下文'],
+  'Открепить': ['Detach', '取消附加'],
+  'Закрепить в контексте': ['Pin to context', '固定到上下文'],
+  'Открыть файл': ['Open file', '打开文件'],
+  'Не удалось открыть файл': ['Failed to open file', '无法打开文件'],
+  'Копировать результат': ['Copy result', '复制结果'],
+  'Повторить': ['Retry', '重试'],
+  'Повторить выполнение': ['Re-run', '重新执行'],
+  'Выполнить': ['Run', '运行'],
+  'Ветвиться': ['Branch', '分支'],
+  'Ветвиться от сюда': ['Branch from here', '从此处分支'],
+  'Подключить контекст': ['Attach context', '附加上下文'],
+  'Подключить рабочую папку': ['Attach working folder', '附加工作文件夹'],
+  'Отключить рабочую папку': ['Detach working folder', '取消附加工作文件夹'],
+  'Очистить все': ['Clear all', '全部清除'],
+  'Нет проектов': ['No projects', '没有项目'],
+
+  // ─── v1.4.2: Sidebar / panels / index.html static text ───
+  'Проекты': ['Projects', '项目'],
+  'Контекст': ['Context', '上下文'],
+  'Контекст проекта': ['Project context', '项目上下文'],
+  'Папка проекта не выбрана': ['No project folder selected', '未选择项目文件夹'],
+  'Фильтры проекта': ['Project filters', '项目筛选器'],
+  'Действия чата': ['Chat actions', '对话操作'],
+  'Переименовать чат': ['Rename chat', '重命名对话'],
+  'Поиск в чате': ['Search in chat', '在对话中搜索'],
+  'Открыть папку': ['Open folder', '打开文件夹'],
+  'Показать детали': ['Show details', '显示详情'],
+  'Обновить контекст': ['Refresh context', '刷新上下文'],
+  'Канбан доска': ['Kanban board', '看板'],
+  'Лендинг кофейни': ['Coffee shop landing', '咖啡馆落地页'],
+  'Дашборд погоды': ['Weather dashboard', '天气仪表板'],
+  'Сайт проекта': ['Project site', '项目网站'],
+  'Источники данных': ['Data sources', '数据源'],
+  'Интеграции': ['Integrations', '集成'],
+  'Переменные окружения': ['Environment variables', '环境变量'],
+  'Деплой': ['Deploy', '部署'],
+  'БД': ['DB', '数据库'],
+  'файлов': ['files', '文件'],
+  'страниц': ['pages', '页'],
+  'Область работы (scope):': ['Working scope:', '工作范围：'],
+  'Ограничить чтение и запись файлов указанной подпапкой': ['Limit file reads and writes to the specified subfolder', '将文件读写限制在指定子文件夹中'],
+  'Префикс для всех коммитов, созданных ассистентом': ['Prefix for all commits created by the assistant', '助手创建的所有提交的前缀'],
+  'Рабочая папка:': ['Working folder:', '工作文件夹：'],
+  'Файл:': ['File:', '文件：'],
+  '— нет —': ['— none —', '— 无 —'],
+  'Русский': ['Russian', '俄语'],
+  'Чат с ассистентом': ['Chat with the assistant', '与助手对话'],
+  'Сообщение ассистенту': ['Message to the assistant', '向助手发送消息'],
+  'Режим работы': ['Working mode', '工作模式'],
+
+  // ─── v1.4.2: Welcome dashboard ───
+  'Опишите вашу идею в чате, и агент мгновенно напишет код.': ['Describe your idea in the chat, and the agent will write code instantly.', '在对话中描述您的想法，智能体将立即编写代码。'],
+  'Что хотите создать?': ['What do you want to create?', '您想创建什么？'],
+
+  // ─── v1.4.2: MCP form placeholders ───
+  'например, npx или node': ['e.g. npx or node', '例如：npx 或 node'],
+  'например, sqlite': ['e.g. sqlite', '例如：sqlite'],
+
+  // ─── v1.4.2: Snapshot / alert / dialog messages ───
+  'Не удалось открыть файл: ': ['Failed to open file: ', '无法打开文件：'],
+  'Пожалуйста, выберите хотя бы один шаг для сборки!': ['Please select at least one step to build.', '请至少选择一个步骤进行构建！'],
+  'Ошибка выбора папки: ': ['Folder selection error: ', '选择文件夹错误：'],
+  'Пожалуйста, выберите рабочую папку проекта для создания снапшота.': ['Please select the project working folder before creating a snapshot.', '请先选择项目工作文件夹以创建快照。'],
+  'Снапшот не найден.': ['Snapshot not found.', '未找到快照。'],
+  'Ошибка создания снапшота: ': ['Snapshot creation failed: ', '快照创建失败：'],
+  'Ошибка восстановления снапшота: ': ['Snapshot restore failed: ', '快照还原失败：'],
+  'Ошибка удаления снапшота: ': ['Snapshot delete failed: ', '快照删除失败：'],
+
+  // ─── v1.4.3: Activity bar / shell exec card ───
+  'Подготовка...': ['Preparing...', '准备中…'],
+  'выполняется': ['running', '执行中'],
+  'успех': ['success', '成功'],
+  'ошибка': ['error', '错误'],
+  'Показать вывод': ['Show output', '显示输出'],
+  'Скрыть вывод': ['Hide output', '隐藏输出'],
+  'Выполнение плана': ['Plan execution', '计划执行'],
+  'Ошибка на шаге': ['Error at step', '步骤出错'],
+  'идёт сборка': ['building', '正在构建'],
+  'План завершён': ['Plan complete', '计划已完成'],
+  'Открыть вкладку Задачи': ['Open the Tasks tab', '打开任务标签'],
+
+  // ─── v1.4.3: Micro-agent card ───
+  'готово': ['done', '完成'],
+  'Чтение': ['Read', '读取'],
+  'Просмотр папки': ['List dir', '列出文件夹'],
+  'Запись': ['Write', '写入'],
+  'Правка': ['Edit', '编辑'],
+  'Поиск': ['Search', '搜索'],
+  'Компоненты': ['Components', '组件'],
+  'Изображение': ['Image', '图片'],
+  'Агент вывел код текстом — переспрашиваю': ['Agent printed code as text — re-asking', '智能体以文本形式输出代码 — 重新询问'],
+  'действий': ['actions', '次操作'],
+  'шагов': ['steps', '步'],
+
+  // ─── v1.4.2: Self-healing user-facing labels ───
+  'Обработка ошибки': ['Error handling', '错误处理'],
+
+  // ─── v1.4.2: Reflection bubble title ───
+  'Рефлексия': ['Reflection', '反思'],
+
+  // ─── v1.4.2: Resume / status ───
+  'Соединение с провайдером прервалось. Контекст диалога сохранён — можно продолжить с того же места.': ['Connection to the provider was lost. The conversation context is preserved — you can resume from the same point.', '与提供商的连接已断开。对话上下文已保存，可以从同一位置继续。'],
 };
 
 let currentLang: Lang = 'ru';
