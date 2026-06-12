@@ -6056,9 +6056,29 @@ $('#btn-refresh-models').addEventListener('click', async () => {
 
 // Clear all data
 $('#btn-clear-all-data').addEventListener('click', async () => {
-  const ok = await confirmDialog('Вы уверены? Все проекты, чаты и настройки будут удалены!', 'Очистить все данные');
-  if (ok) {
-    localStorage.clear(); location.reload();
+  const ok = await confirmDialog(t('Вы уверены? Все проекты, чаты и настройки будут удалены!'), t('Очистить все данные'));
+  if (!ok) return;
+  try {
+    // Stop any pending debounced project save so it can't rewrite data after the wipe.
+    if (saveProjectsTimer) { clearTimeout(saveProjectsTimer); saveProjectsTimer = null; }
+    projects = [];
+    activeProject = null;
+
+    // 1. Plain localStorage — settings, user profile, skills, recent folders, chat width.
+    localStorage.clear();
+
+    // 2. Persistent project/chat store (a separate JSON file in userData, NOT localStorage).
+    if (window.electronAPI?.storeSet) {
+      await window.electronAPI.storeSet('projects', '[]').catch(() => {});
+    }
+
+    // 3. Encrypted OpenRouter API key (stored in secure-key.bin via safeStorage,
+    //    so localStorage.clear() never removed it — this was the reported bug).
+    if (window.electronAPI?.secureKeySet) {
+      await window.electronAPI.secureKeySet('').catch(() => {});
+    }
+  } finally {
+    location.reload();
   }
 });
 

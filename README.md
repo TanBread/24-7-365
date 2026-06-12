@@ -7,7 +7,7 @@
 **An autonomous, local AI developer agent for Windows.**
 Describe what you want — it reads your files, writes precise edits, runs commands, and shows you a live preview, all inside your own project folder.
 
-[![Download](https://img.shields.io/badge/Download-v1.5.0-18181b?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
+[![Download](https://img.shields.io/badge/Download-v1.5.1-18181b?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-3f3f46?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
 

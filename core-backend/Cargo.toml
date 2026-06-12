@@ -1,6 +1,6 @@
 [package]
 name = "core-backend"
-version = "1.5.0"
+version = "1.5.1"
 edition = "2021"
 description = "Native AST + BM25 search engine for 7/24 IDE"
 license = "MIT"

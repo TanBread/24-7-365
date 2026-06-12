@@ -4,6 +4,16 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.5.1] - 2026-06-12
+
+A small maintenance update focused on polish and data management.
+
+### Improved
+*   **"Clear all data" now does a complete reset:** Choosing *Settings → Clear all data* now wipes everything in one step — projects, chats, settings, the saved provider API key, learned skills and recent folders — returning the app to a clean first-run state. Great for handing the machine to someone else or starting fresh.
+*   **Model favorites polish:** Favoriting a model in the picker highlights its star instantly, and unpinning clears the highlight just as quickly — with no list flicker.
+
+---
+
 ## [1.5.0] - 2026-06-12
 
 A major release: a new native engine, a redesigned chat and planning experience, a smart model picker, and broad stability & security improvements.
