@@ -4,6 +4,20 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.5.2] - 2026-06-13
+
+A maintenance release focused on release consistency, update metadata and TypeScript health before wider sharing.
+
+### Fixed
+*   **TypeScript check:** Fixed a nullable custom model dropdown reference in the renderer so `npx tsc --noEmit` passes again.
+*   **Version metadata:** Synchronized root, desktop GUI, lockfile and native core versions at `1.5.2`.
+*   **Updater metadata:** Refreshed release metadata so the GitHub updater can find the current Windows installer artifacts.
+
+### Changed
+*   **Docs and website:** Updated the README badge, website download copy and release notes to point at `v1.5.2`.
+
+---
+
 ## [1.5.1] - 2026-06-12
 
 A small maintenance update focused on polish and data management.

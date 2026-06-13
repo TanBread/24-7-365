@@ -5310,6 +5310,7 @@ function initCustomModelDropdown() {
   const chatModelSelect = document.getElementById('chat-model-select') as HTMLSelectElement | null;
 
   if (!slot || !dropdown || !listContainer) return;
+  const modelDropdown = dropdown;
 
   slot.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('#custom-model-dropdown')) {
@@ -5399,7 +5400,7 @@ function initCustomModelDropdown() {
         }
         
         updateModelLabel();
-        dropdown.classList.add('hidden');
+        modelDropdown.classList.add('hidden');
       });
 
       listContainer!.appendChild(item);

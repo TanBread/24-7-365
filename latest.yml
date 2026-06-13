@@ -1,8 +1,8 @@
-version: 1.4.1
+version: 1.5.2
 files:
-  - url: 7-24-IDE-Setup-1.4.1.exe
-    sha512: f948d48ab129ef860b726c6e023100ecf763bae4af24818620d981df87f7dc4298b021e72d1722a04c57f5edfb65191a08a432f74d9b022220fd84f25ced2748
-    size: 96390044
-path: 7-24-IDE-Setup-1.4.1.exe
-sha512: f948d48ab129ef860b726c6e023100ecf763bae4af24818620d981df87f7dc4298b021e72d1722a04c57f5edfb65191a08a432f74d9b022220fd84f25ced2748
-releaseDate: 2026-06-11T00:00:00.000Z
+  - url: 7-24-IDE-Setup-1.5.2.exe
+    sha512: PuRPrQEnvcssKIaU2BK940nE2IcRmi6YEH8pBNdqG40tSSI/1b4GkJp7gE/0fqkNrl2ex41sEPVutDSERsCKEg==
+    size: 96379731
+path: 7-24-IDE-Setup-1.5.2.exe
+sha512: PuRPrQEnvcssKIaU2BK940nE2IcRmi6YEH8pBNdqG40tSSI/1b4GkJp7gE/0fqkNrl2ex41sEPVutDSERsCKEg==
+releaseDate: '2026-06-13T13:17:17.928Z'
