@@ -1,38 +1,35 @@
-name: ✨ Feature Request
-description: Suggest an idea or improvement for 7/24 IDE
+name: Feature request
+description: Suggest a workflow or improvement for DockTUI.
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for the suggestion! Tell us what you'd like to see.
   - type: textarea
     id: problem
     attributes:
-      label: What problem does this solve?
-      description: What are you trying to do that's hard or impossible today?
-      placeholder: I often need to ... but currently ...
+      label: Problem
+      description: What Docker workflow is currently repetitive, slow, or hard?
     validations:
       required: true
   - type: textarea
     id: solution
     attributes:
       label: Proposed solution
-      description: Describe what you'd like to happen.
+      description: What should DockTUI do?
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: Any workarounds or other approaches you've thought about.
+      description: Are there commands or tools you use today?
     validations:
       required: false
-  - type: textarea
-    id: context
+  - type: checkboxes
+    id: scope
     attributes:
-      label: Additional context
-      description: Mockups, examples from other tools, or anything else.
-    validations:
-      required: false
+      label: Scope check
+      options:
+        - label: This can work without adding runtime dependencies.
+          required: false
+        - label: This fits local Docker container/image workflows.
+          required: false
