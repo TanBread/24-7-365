@@ -11,7 +11,7 @@ Describe what you want — it reads your files, writes precise edits, runs comma
 [![License](https://img.shields.io/badge/License-MIT-3f3f46?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
 
-![7/24 IDE Social Preview](social-preview-light.png)
+![7/24 IDE Social Preview](social-preview-light.png?v=2)
 
 </div>
 
