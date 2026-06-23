@@ -9,6 +9,7 @@ Describe what you want — it reads your files, writes precise edits, runs comma
 
 [![Download](https://img.shields.io/badge/Download-v1.5.3-18181b?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-3f3f46?style=for-the-badge)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/strmax195-hue/7-24-IDE/ci.yml?branch=main&style=for-the-badge&logo=github)](https://github.com/strmax195-hue/7-24-IDE/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
 
 ![7/24 IDE Social Preview](social-preview-banner.png)
@@ -24,6 +25,17 @@ Standard AI chats make you copy-paste code blocks endlessly. Browser sandboxes t
 **7/24 IDE is different.** It's a focused, local workspace built around an autonomous developer agent. You describe a task; the agent reads your files, makes precise modifications, runs install/build scripts, and renders a live preview — like a junior developer working directly in your project folder, 24/7.
 
 Everything runs **locally**. Your code, chats, settings and snapshots never leave your machine.
+
+---
+
+## Table of Contents
+- [Why 7/24 IDE?](#why-724-ide)
+- [Plan & Build — two ways to work](#plan--build--two-ways-to-work)
+- [Key Features](#key-features)
+- [Quick Start](#quick-start)
+- [Under the Hood](#under-the-hood)
+- [Building from Source](#building-from-source)
+- [License](#license)
 
 ---
 
