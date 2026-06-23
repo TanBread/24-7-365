@@ -3,7 +3,7 @@
   "version": "1.5.3",
   "description": "Desktop AI coding agent. Describe what you want to build — the agent reads your files, writes code, runs commands, and shows the result.",
   "private": true,
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "workspaces": [
     "desktop-gui"
   ],
