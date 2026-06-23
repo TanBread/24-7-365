@@ -329,7 +329,6 @@ const DICT: Record<string, [string, string]> = {
   'Добавить новый шаг к плану': ['Add a new step to the plan', '向计划添加新步骤'],
   'Добавить шаг': ['Add step', '添加步骤'],
   'Начать сборку': ['🚀 Start build', '🚀 开始构建'],
-  'Ассистент': ['Assistant', '助手'],
   'Рекомендуется планирование': ['Planning recommended', '建议先规划'],
   'Похоже, вы хотите создать проект с нуля. Для сложных задач удобнее сначала составить пошаговый план в режиме Plan. Либо можно сразу приступить к разработке.': ['It looks like you want to build a project from scratch. For complex tasks it\u2019s easier to outline a step-by-step plan in Plan mode first. Or you can start building right away.', '看起来您想从头构建一个项目。对于复杂任务，最好先在 Plan 模式中制定分步计划。或者您可以立即开始构建。'],
   'Спланировать (Plan)': ['Plan it (Plan)', '制定计划 (Plan)'],
@@ -593,7 +592,6 @@ const DICT: Record<string, [string, string]> = {
   'Обработка ошибки': ['Error handling', '错误处理'],
 
   // ─── v1.4.2: Reflection bubble title ───
-  'Рефлексия': ['Reflection', '反思'],
 
   // ─── v1.4.2: Resume / status ───
   'Соединение с провайдером прервалось. Контекст диалога сохранён — можно продолжить с того же места.': ['Connection to the provider was lost. The conversation context is preserved — you can resume from the same point.', '与提供商的连接已断开。对话上下文已保存，可以从同一位置继续。'],
