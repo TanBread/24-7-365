@@ -776,7 +776,7 @@ async function refreshModelsInBackground() {
       const fallback = fresh.find(m => m.id === settings.fallbackModel) || fresh[0];
       const lostId = settings.model;
       settings.model = fallback.id;
-      appendBubble('Система', `⚠️ ${t('Модель')} ${lostId} ${t('больше недоступна у провайдера. Переключаюсь на')} ${fallback.id}.`, true);
+      appendBubble(t('Система'), `⚠️ ${t('Модель')} ${lostId} ${t('больше недоступна у провайдера. Переключаюсь на')} ${fallback.id}.`, true);
     }
     saveSettings();
     updateModelLabel();
@@ -790,7 +790,7 @@ async function refreshModelsInBackground() {
     if (priceChanged.length) parts.push(`${priceChanged.length} ${t('изменили цены')}`);
     if (parts.length) {
       console.info('[models] catalogue changed:', { added: added.map(m => m.id), removed: removed.map(m => m.id), priceChanged: priceChanged.map(m => m.id) });
-      appendBubble('Система', `🔄 ${t('Каталог моделей обновлён')}: ${parts.join(', ')}.`, true);
+      appendBubble(t('Система'), `🔄 ${t('Каталог моделей обновлён')}: ${parts.join(', ')}.`, true);
     }
   } catch (err) {
     // Silent: a startup model refresh failure should not bother the user.
@@ -872,7 +872,7 @@ function populateModelSelect(models: ModelInfo[], selectedId?: string) {
 // ═══════════════════════════════════════════
 function genId(): string { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
-function createProject(name = 'Новый проект'): Project {
+function createProject(name = t('Новый проект')): Project {
   const p: Project = { 
     id: genId(), 
     name, 
@@ -967,7 +967,7 @@ async function setWorkspaceFolder(folder: string) {
   saveProjects();
   updateSidebarFolderUI(activeProject);
   addRecentFolder(folder);
-  appendBubble('Система', `${t('📂 Рабочая папка установлена')}: ${folder}`, true);
+  appendBubble(t('Система'), `${t('📂 Рабочая папка установлена')}: ${folder}`, true);
   renderPreview();
   refreshWorkspaceFilesUI();
   renderSidebarProjects();
@@ -1089,7 +1089,7 @@ function maybeShowResumeOnLoad() {
 }
 
 function updateProjectNameUI() { 
-  const name = activeProject?.name || 'Новый проект';
+  const name = activeProject?.name || t('Новый проект');
   titlebarProjectName.textContent = name; 
   const agenticTitle = document.getElementById('agentic-chat-title-text');
   if (agenticTitle) agenticTitle.textContent = name;
@@ -1823,7 +1823,7 @@ function buildMessageHtml(
     ? buildMsgActions(true)
     : buildMsgActions(false);
 
-  const modelLabel = isAi && sender !== 'Система' && sender !== 'System' && settings.model
+  const modelLabel = isAi && sender !== t('Система') && sender !== 'Система' && sender !== 'System' && settings.model
     ? esc(settings.model.split('/').pop() || settings.model)
     : '';
 
@@ -1926,7 +1926,7 @@ function renderChatHistory() {
     
     const isAi = msg.role === 'assistant';
     if (!isAi) {
-      appendBubble('Вы', msg.content, false, i);
+      appendBubble(t('Вы'), msg.content, false, i);
     } else {
       let toolResults: string[] = [];
       const nextMsg = activeProject.chatHistory[i + 1];
@@ -2667,7 +2667,7 @@ function renderPlanWidgetInChat(steps: string[]) {
     const tPlan = document.getElementById('mode-tab-plan');
     tBuild?.classList.add('active');
     tPlan?.classList.remove('active');
-    appendBubble('Система', `▶️ ${t('План утверждён. Перехожу в режим разработки. Прогресс — на вкладке «Задачи».')}`, true);
+    appendBubble(t('Система'), `▶️ ${t('План утверждён. Перехожу в режим разработки. Прогресс — на вкладке «Задачи».')}`, true);
     renderTasksUI();
     switchToPreviewTab('tasks');
 
@@ -2813,20 +2813,20 @@ function showCommitVerificationCard(planId: string, suggestedMsg: string, worksp
       const fullMsg = `${prefix} ${userMsg || suggestedMsg}`;
       div.remove();
       
-      appendBubble('Система', `🤖 ${t('Создаю коммит...')} "${fullMsg}"`, true);
+      appendBubble(t('Система'), `🤖 ${t('Создаю коммит...')} "${fullMsg}"`, true);
       const commitRes = await window.electronAPI.executeCommand(`git commit -m "${fullMsg.replace(/"/g, "'")}"`, workspacePath);
       if (commitRes.code === 0) {
-        appendBubble('Система', `✅ ${t('Авто-коммит успешно создан:')} <code>${esc(fullMsg)}</code>`, true);
+        appendBubble(t('Система'), `✅ ${t('Авто-коммит успешно создан:')} <code>${esc(fullMsg)}</code>`, true);
       } else {
         console.warn('Git commit failed:', commitRes.stderr);
-        appendBubble('Система', `⚠️ ${t('Не удалось создать коммит:')} ${commitRes.stderr}`, true);
+        appendBubble(t('Система'), `⚠️ ${t('Не удалось создать коммит:')} ${commitRes.stderr}`, true);
       }
       resolve();
     });
     
     div.querySelector('.btn-skip-commit')?.addEventListener('click', () => {
       div.remove();
-      appendBubble('Система', `⏭️ ${t('Авто-коммит пропущен')}`, true);
+      appendBubble(t('Система'), `⏭️ ${t('Авто-коммит пропущен')}`, true);
       resolve();
     });
   });
@@ -2861,7 +2861,7 @@ async function markStepCompleted(planId: string, idx: number) {
         
         if (diff.trim()) {
           const stepText = planSteps[idx].text;
-          appendBubble('Система', `🤖 ${t('Генерирую коммит для шага:')} "${stepText}"...`, true);
+          appendBubble(t('Система'), `🤖 ${t('Генерирую коммит для шага:')} "${stepText}"...`, true);
           const commitMsg = await generateCommitMessage(diff, stepText);
           
           if (settings.gitVerifyCommit) {
@@ -2872,10 +2872,10 @@ async function markStepCompleted(planId: string, idx: number) {
             const commitRes = await window.electronAPI.executeCommand(`git commit -m "${fullMsg.replace(/"/g, "'")}"`, activeProject.workspacePath);
             
             if (commitRes.code === 0) {
-              appendBubble('Система', `✅ ${t('Авто-коммит успешно создан:')} <code>${esc(fullMsg)}</code>`, true);
+              appendBubble(t('Система'), `✅ ${t('Авто-коммит успешно создан:')} <code>${esc(fullMsg)}</code>`, true);
             } else {
               console.warn('Git commit failed:', commitRes.stderr);
-              appendBubble('Система', `⚠️ ${t('Не удалось создать коммит:')} ${commitRes.stderr}`, true);
+              appendBubble(t('Система'), `⚠️ ${t('Не удалось создать коммит:')} ${commitRes.stderr}`, true);
             }
           }
         }
@@ -3625,12 +3625,12 @@ async function handleUserMessage(text: string) {
   }
 
   if (!activeProject!.workspacePath) {
-    appendBubble('Система', t('📂 Рабочая папка не выбрана. Агент не сможет читать и сохранять файлы. Нажмите «Открыть» внизу боковой панели слева, чтобы выбрать папку.'), true);
+    appendBubble(t('Система'), t('📂 Рабочая папка не выбрана. Агент не сможет читать и сохранять файлы. Нажмите «Открыть» внизу боковой панели слева, чтобы выбрать папку.'), true);
   }
 
   setGeneratingState(true);
 
-  appendBubble('Вы', text, false);
+  appendBubble(t('Вы'), text, false);
   autoScrollEnabled = true;
   buildSessionWroteFiles = false;
   resetActivityCounters();
@@ -4142,7 +4142,7 @@ async function streamChatCompletionWithFallback(messages: any[]) {
     if (/401|unauthorized|403/i.test(msg)) throw err;
     const fb = settings.fallbackModel;
     if (!fb || fb === primary) throw err;
-    appendBubble('Система', `⚠️ ${primary}: ${err.message}. ${t('Переключаюсь на резервную модель')} → ${fb}`, true);
+    appendBubble(t('Система'), `⚠️ ${primary}: ${err.message}. ${t('Переключаюсь на резервную модель')} → ${fb}`, true);
     return await streamChatCompletion(messages, fb, settings.apiKey);
   }
 }
@@ -5005,13 +5005,13 @@ function requestPermission(type: string, desc: string): Promise<boolean> {
 
     card.querySelector('.btn-allow')?.addEventListener('click', () => {
       cleanup();
-      appendBubble('Вы', `${t('Разрешено')}: ${desc}`, false);
+      appendBubble(t('Вы'), `${t('Разрешено')}: ${desc}`, false);
       resolve(true);
     });
 
     card.querySelector('.btn-deny')?.addEventListener('click', () => {
       cleanup();
-      appendBubble('Вы', `${t('Запрещено')}: ${desc}`, false);
+      appendBubble(t('Вы'), `${t('Запрещено')}: ${desc}`, false);
       resolve(false);
     });
   });
@@ -5149,13 +5149,13 @@ function requestWritePermissionWithDiff(filePath: string, oldContent: string, ne
 
     const handleApprove = () => {
       cleanup();
-      appendBubble('Вы', `${t('Приняты изменения в файле')}: ${filePath}`, false);
+      appendBubble(t('Вы'), `${t('Приняты изменения в файле')}: ${filePath}`, false);
       resolve(true);
     };
 
     const handleReject = () => {
       cleanup();
-      appendBubble('Вы', `${t('Отклонены изменения в файле')}: ${filePath}`, false);
+      appendBubble(t('Вы'), `${t('Отклонены изменения в файле')}: ${filePath}`, false);
       resolve(false);
     };
 
@@ -5266,7 +5266,7 @@ btnSidebarClearFolder.addEventListener('click', async () => {
     renderSidebarProjects();
     renderAgentTabs();
     renderPreview();
-    appendBubble('Система', t('🗑️ Рабочая папка откреплена от проекта.'), true);
+    appendBubble(t('Система'), t('🗑️ Рабочая папка откреплена от проекта.'), true);
   }
 });
 
@@ -5525,7 +5525,7 @@ document.getElementById('btn-chat-detach-context')?.addEventListener('click', as
     renderAgentTabs();
     renderPreview();
     refreshWorkspaceFilesUI();
-    appendBubble('Система', t('🗑️ Рабочая папка откреплена от проекта.'), true);
+    appendBubble(t('Система'), t('🗑️ Рабочая папка откреплена от проекта.'), true);
   }
 });
 
@@ -5571,7 +5571,7 @@ sidebarScopeInput.addEventListener('change', () => {
   if (!activeProject) return;
   activeProject.scopePath = sidebarScopeInput.value.trim();
   saveProjects();
-  appendBubble('Система', `🎯 ${t('Область работы установлена')}: "${activeProject.scopePath || t('весь проект')}"`, true);
+  appendBubble(t('Система'), `🎯 ${t('Область работы установлена')}: "${activeProject.scopePath || t('весь проект')}"`, true);
 });
 
 
@@ -5635,7 +5635,7 @@ function setupIframeInspection() {
       let tagDesc = target.tagName.toLowerCase();
       if (target.id) tagDesc += `#${target.id}`;
 
-      appendBubble('Система', `🔍 ${t('Выбран элемент')} <${tagDesc}>. ${t('Контекст этого элемента будет добавлен к вашему следующему сообщению. Опишите в чате, что хотите изменить.')}`, true);
+      appendBubble(t('Система'), `🔍 ${t('Выбран элемент')} <${tagDesc}>. ${t('Контекст этого элемента будет добавлен к вашему следующему сообщению. Опишите в чате, что хотите изменить.')}`, true);
 
       // Show a brief focus hint on the chat input
       chatInput.placeholder = '✏️ Опишите, что изменить в выбранном элементе...';
@@ -7071,16 +7071,16 @@ document.getElementById('btn-copy-chat')?.addEventListener('click', () => {
   const lines: string[] = [];
   for (const msg of activeProject.chatHistory) {
     if (msg.role === 'system') continue;
-    const sender = msg.role === 'user' ? 'Вы' : 'Ассистент';
+    const sender = msg.role === 'user' ? t('Вы') : t('Ассистент');
     lines.push(`### ${sender}`);
     lines.push(msg.content);
     lines.push('');
   }
   const text = lines.join('\n');
   navigator.clipboard.writeText(text).then(() => {
-    appendBubble('Система', t('📋 Чат скопирован в буфер обмена.'), true);
+    appendBubble(t('Система'), t('📋 Чат скопирован в буфер обмена.'), true);
   }).catch(() => {
-    appendBubble('Система', t('❌ Не удалось скопировать чат.'), true);
+    appendBubble(t('Система'), t('❌ Не удалось скопировать чат.'), true);
   });
 });
 
@@ -7389,7 +7389,7 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
   );
   dropZone.addEventListener('drop', async (e) => {
     if (!activeProject || !activeProject.workspacePath) {
-      appendBubble('Система', t('📂 Сначала выберите рабочую папку, чтобы прикрепить файлы.'), true);
+      appendBubble(t('Система'), t('📂 Сначала выберите рабочую папку, чтобы прикрепить файлы.'), true);
       return;
     }
     const files = Array.from((e as DragEvent).dataTransfer?.files || []);
@@ -7411,7 +7411,7 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
       added++;
     }
     if (added > 0) renderAttachedFiles();
-    if (outside > 0) appendBubble('Система', t('⚠️ Часть файлов вне рабочей папки и пропущена.'), true);
+    if (outside > 0) appendBubble(t('Система'), t('⚠️ Часть файлов вне рабочей папки и пропущена.'), true);
   });
 
   // Live terminal: subscribe to streamed command output + clear button
@@ -7865,7 +7865,7 @@ async function runReflection() {
   const bubble = document.createElement('div');
   bubble.className = 'chat-message ai';
   bubble.innerHTML = `
-    <div class="message-meta"><span class="sender-name">Рефлексия</span><span class="time">${time}</span></div>
+    <div class="message-meta"><span class="sender-name">${t('Рефлексия')}</span><span class="time">${time}</span></div>
     <div class="message-text">
       <div class="reflection-indicator" style="display: flex; align-items: center; gap: 8px;">
         <span class="thinking-indicator"><span></span><span></span><span></span></span>
@@ -7892,8 +7892,9 @@ async function runReflection() {
 
 ВАЖНО:
 - Формулируй навык обобщённо (по технологии/паттерну), а не под одну конкретную задачу.
-- keywords — это слова, по которым навык будет автоматически подключаться в будущем (на русском и английском).
+- keywords — это слова, по которым навык будет автоматически подключаться в будущем.
 - Если в этой сессии нет ничего достойного переиспользования (тривиальная правка), верни строго: {"skip": true}
+- Язык результата (name и content) ДОЛЖЕН БЫТЬ строго на языке интерфейса пользователя (lang code: ${settings.language || 'ru'}). Отвечай на английском, если код 'en', на китайском, если 'zh'.
 
 Верни ТОЛЬКО валидный JSON без markdown и лишнего текста. Пример:
 {
@@ -8514,7 +8515,7 @@ async function createSnapshot(name: string, desc: string) {
     }
 
     if (Object.keys(filesData).length === 0) {
-      appendBubble('Система', t('⚠️ Не удалось создать снапшот: нет файлов для сохранения.'), true);
+      appendBubble(t('Система'), t('⚠️ Не удалось создать снапшот: нет файлов для сохранения.'), true);
       removeThinking();
       return;
     }
@@ -8532,7 +8533,7 @@ async function createSnapshot(name: string, desc: string) {
     snapshots.push(newSnapshot);
     await saveProjectSnapshots(snapshots);
     
-    appendBubble('Система', `📸 ${t('Снапшот создан')}: "${newSnapshot.name}" (${Object.keys(filesData).length}, ${formatBytes(totalSize)}).`, true);
+    appendBubble(t('Система'), `📸 ${t('Снапшот создан')}: "${newSnapshot.name}" (${Object.keys(filesData).length}, ${formatBytes(totalSize)}).`, true);
     await renderSnapshotsUI();
   } catch (err: any) {
     alert(`${t('Ошибка создания снапшота: ')}${err.message}`);
@@ -8582,7 +8583,7 @@ async function rollbackToSnapshot(snapshotId: string) {
       }
     }
 
-    appendBubble('Система', `⏪ ${t('Откат к снапшоту выполнен')}: "${snap.name}".`, true);
+    appendBubble(t('Система'), `⏪ ${t('Откат к снапшоту выполнен')}: "${snap.name}".`, true);
     
     renderPreview();
     refreshWorkspaceFilesUI();

@@ -4,6 +4,19 @@ All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---
 
+## [1.5.3] - 2026-06-23
+
+A UI polish and localization update to improve the premium feel of the app and strictly enforce translation rules.
+
+### Improved
+*   **Diff Modal Redesign:** The "Compare Changes" modal has been completely redesigned with a modern, glassmorphism-inspired UI, smooth borders, shadows, and clear primary/secondary action buttons.
+*   **Strict Localization:**
+    *   Creating a new project without typing a name will now name the folder translated correctly (e.g., "New project" instead of hardcoded "Новый проект") depending on app language settings.
+    *   System chat bubbles and roles (System, You, Assistant, Reflection) are now correctly localized.
+    *   The Reflection module now strictly generates new learned Skills (both name and content) in the user's selected language.
+
+---
+
 ## [1.5.2] - 2026-06-13
 
 A maintenance release focused on release consistency, update metadata and TypeScript health before wider sharing.

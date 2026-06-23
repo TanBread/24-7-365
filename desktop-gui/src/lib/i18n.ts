@@ -274,6 +274,7 @@ const DICT: Record<string, [string, string]> = {
   'Редактировать': ['Edit', '编辑'],
   'Думаю над задачей...': ['Thinking about the task...', '正在思考任务...'],
   'Размышления': ['Reasoning', '推理'],
+  'Рефлексия': ['Reflection', '反思'],
   'Готово': ['Done', '完成'],
   'Скопировано': ['Copied', '已复制'],
   'Ожидание запуска...': ['Waiting to run...', '等待运行...'],
@@ -318,6 +319,9 @@ const DICT: Record<string, [string, string]> = {
   'Записать код': ['Write code', '写入代码'],
   'Приняты изменения в файле': ['Changes accepted in file', '已接受文件中的更改'],
   'Отклонены изменения в файле': ['Changes rejected in file', '已拒绝文件中的更改'],
+  'Система': ['System', '系统'],
+  'Вы': ['You', '您'],
+  'Ассистент': ['Assistant', '助手'],
 
   // ─── Dynamic: plan widget & router ───
   'План разработки': ['Development plan', '开发计划'],

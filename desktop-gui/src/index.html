@@ -978,23 +978,31 @@
   </div>
 
   <!-- ═══════════ SIDE-BY-SIDE DIFF COMPARISON MODAL ═══════════ -->
-  <div class="modal-backdrop hidden" id="diff-modal">
-    <div class="modal modal-wide diff-modal-card" style="width: 90vw; max-width: 1200px; height: 85vh; display: flex; flex-direction: column; max-height: 85vh;">
-      <div class="modal-header">
-        <h3><i data-lucide="split"></i> <span id="diff-modal-title">Сравнение изменений</span></h3>
-        <button class="modal-close" id="btn-close-diff-modal"><i data-lucide="x"></i></button>
-      </div>
-      <div class="modal-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0;">
-        <div class="diff-file-info" style="padding: 10px 20px; background: var(--bg-panel-alt); border-bottom: 1px solid var(--border-default); font-family: var(--font-code); font-size: 12px; color: var(--text-secondary);">
-          Файл: <span id="diff-file-path" style="font-weight: 600;">src/index.html</span>
+  <div class="modal-backdrop hidden" id="diff-modal" style="background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px);">
+    <div class="modal modal-wide diff-modal-card" style="width: 90vw; max-width: 1280px; height: 88vh; display: flex; flex-direction: column; max-height: 88vh; border-radius: 12px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid var(--border-default);">
+      <div class="modal-header" style="background: var(--bg-panel-alt); padding: 16px 24px; border-bottom: 1px solid var(--border-default); display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background: var(--bg-panel); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-sm); border: 1px solid var(--border-default);">
+            <i data-lucide="git-compare" style="width: 20px; height: 20px; color: var(--accent-blue);"></i>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;"><span id="diff-modal-title" data-t="Сравнение изменений">Сравнение изменений</span></h3>
+            <div style="font-family: var(--font-code); font-size: 12px; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="file-code" style="width: 12px; height: 12px;"></i>
+              <span id="diff-file-path" style="font-weight: 600;">src/index.html</span>
+            </div>
+          </div>
         </div>
+        <button class="modal-close" id="btn-close-diff-modal" style="width: 32px; height: 32px; border-radius: 8px; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-muted); transition: all 0.2s;"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+      </div>
+      <div class="modal-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0; background: var(--bg-app);">
         <div class="diff-panes-container" style="flex: 1; display: flex; overflow: hidden; position: relative;">
           <div id="monaco-diff-container" style="flex: 1; min-height: 400px; width: 100%;"></div>
         </div>
       </div>
-      <div class="modal-footer" style="padding: 14px 20px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--border-default);">
-        <button id="btn-diff-reject" class="secondary-btn" style="border-color: var(--accent-red); color: var(--accent-red);"><i data-lucide="x"></i> Отклонить</button>
-        <button id="btn-diff-approve" class="primary-btn"><i data-lucide="check"></i> Применить</button>
+      <div class="modal-footer" style="padding: 16px 24px; background: var(--bg-panel); display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid var(--border-default);">
+        <button id="btn-diff-reject" class="secondary-btn" style="border-color: transparent; color: var(--accent-red); background: rgba(220, 38, 38, 0.1); font-weight: 600; padding: 0 16px; height: 38px; border-radius: 8px;"><i data-lucide="x" style="margin-right: 6px; width: 16px; height: 16px;"></i> <span data-t="Отклонить">Отклонить</span></button>
+        <button id="btn-diff-approve" class="primary-btn" style="background: var(--accent-blue); color: #fff; font-weight: 600; padding: 0 20px; height: 38px; border-radius: 8px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"><i data-lucide="check" style="margin-right: 6px; width: 16px; height: 16px;"></i> <span data-t="Применить">Применить</span></button>
       </div>
     </div>
   </div>
