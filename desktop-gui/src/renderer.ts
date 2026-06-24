@@ -4194,59 +4194,40 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
 
   const debouncedRender = () => {
     if (pendingRender) return;
-    const now = performance.now();
-    const elapsed = now - lastRenderTime;
-    if (elapsed < 32) {
-      pendingRender = true;
-      requestAnimationFrame(() => {
-        pendingRender = false;
-        lastRenderTime = performance.now();
-        let html = parseMarkdown(fullContent);
-        html = formatToolTags(html);
-        textEl.innerHTML = html;
-        
-        if (fullReasoning) {
-          const reasoningContent = bubble.querySelector('.reasoning-content') as HTMLElement | null;
-          if (reasoningContent) {
-            reasoningContent.textContent = fullReasoning;
-            if (autoScrollEnabled) {
-              reasoningContent.scrollTop = reasoningContent.scrollHeight;
-            }
+    pendingRender = true;
+    requestAnimationFrame(() => {
+      pendingRender = false;
+      
+      let html = parseMarkdown(fullContent);
+      html = formatToolTags(html);
+      textEl.innerHTML = html;
+      
+      if (fullReasoning) {
+        const reasoningContent = bubble.querySelector('.reasoning-content') as HTMLElement | null;
+        if (reasoningContent) {
+          reasoningContent.textContent = fullReasoning;
+          if (autoScrollEnabled) {
+            reasoningContent.scrollTop = reasoningContent.scrollHeight;
           }
         }
-
-        // Show partial tool call indicator during streaming
-        const partialTools = toolCallsAcc.filter(tc => tc && tc.name && !tc.argsRaw.includes('</'));
-        if (partialTools.length > 0 && !textEl.querySelector('.tool-accordion')) {
-          const indicator = document.createElement('div');
-          indicator.className = 'streaming-tool-indicator';
-          indicator.innerHTML = `<i data-lucide="loader-2" class="action-spinner"></i> ${esc(t('Выполнение инструмента...'))}`;
-          textEl.appendChild(indicator);
-          refreshIcons();
-        }
-        scrollToBottom();
-        if (!fullContent.trim()) {
-          textEl.innerHTML = '<span class="stream-cursor">|</span>';
-        }
-      });
-      return;
-    }
-    lastRenderTime = now;
-    let html = parseMarkdown(fullContent);
-    html = formatToolTags(html);
-    textEl.innerHTML = html;
-    
-    if (fullReasoning) {
-      const reasoningContent = bubble.querySelector('.reasoning-content') as HTMLElement | null;
-      if (reasoningContent) {
-        reasoningContent.textContent = fullReasoning;
-        if (autoScrollEnabled) {
-          reasoningContent.scrollTop = reasoningContent.scrollHeight;
-        }
       }
-    }
-    
-    scrollToBottom();
+
+      // Show partial tool call indicator during streaming
+      const partialTools = toolCallsAcc.filter(tc => tc && tc.name && !tc.argsRaw.includes('</'));
+      if (partialTools.length > 0 && !textEl.querySelector('.tool-accordion')) {
+        const indicator = document.createElement('div');
+        indicator.className = 'streaming-tool-indicator';
+        indicator.innerHTML = `<i data-lucide="loader-2" class="action-spinner"></i> ${esc(t('Выполнение инструмента...'))}`;
+        textEl.appendChild(indicator);
+        refreshIcons();
+      }
+      
+      scrollToBottom();
+      
+      if (!fullContent.trim()) {
+        textEl.innerHTML = '<span class="stream-cursor">|</span>';
+      }
+    });
   };
 
   let isTruncated = true;
@@ -4366,7 +4347,6 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
                 refreshIcons();
               }
               debouncedRender();
-              scrollToBottom();
             }
           } catch (e) {
             console.error('[Stream error/warn] Unparseable SSE chunk:', e, data);
