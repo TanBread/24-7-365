@@ -4206,9 +4206,12 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         textEl.innerHTML = html;
         
         if (fullReasoning) {
-          const reasoningContent = bubble.querySelector('.reasoning-content');
+          const reasoningContent = bubble.querySelector('.reasoning-content') as HTMLElement | null;
           if (reasoningContent) {
             reasoningContent.textContent = fullReasoning;
+            if (autoScrollEnabled) {
+              reasoningContent.scrollTop = reasoningContent.scrollHeight;
+            }
           }
         }
 
@@ -4234,9 +4237,12 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
     textEl.innerHTML = html;
     
     if (fullReasoning) {
-      const reasoningContent = bubble.querySelector('.reasoning-content');
+      const reasoningContent = bubble.querySelector('.reasoning-content') as HTMLElement | null;
       if (reasoningContent) {
         reasoningContent.textContent = fullReasoning;
+        if (autoScrollEnabled) {
+          reasoningContent.scrollTop = reasoningContent.scrollHeight;
+        }
       }
     }
     
