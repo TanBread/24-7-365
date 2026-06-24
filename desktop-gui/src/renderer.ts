@@ -274,7 +274,7 @@ const SYSTEM_PROMPT_BUILD = `${SYSTEM_PROMPT_COMMON}
 - <read_file path="путь" full="true"/> — прочитать содержимое файла. Параметр full="true" является необязательным и отключает AST-сжатие контекста. По умолчанию (без full="true") возвращается сжатый каркас (сигнатуры функций, экспорты и интерфейсы) для экономии токенов. Используй full="true" только по необходимости.
 - <write_file path="путь">содержимое</write_file> — записать новый файл.
 - <edit_file path="путь"><search>старый код</search><replace>новый код</replace></edit_file> — редактировать существующий файл.
-- <execute_command command="команда"/> — запустить терминальную команду.
+- <execute_command command="команда"/> — запустить терминальную команду. ОС пользователя — Windows (PowerShell). ЗАПРЕЩЕНО использовать Linux-команды (ls, cat, grep, pwd). Для работы с файлами используй ТОЛЬКО встроенные инструменты (<read_dir>, <read_file> и т.д.).
 - <list_components/> — получить список переиспользуемых компонентов проекта.
 - <search_code query="ключевые слова"/> — быстрый поиск по всей кодовой базе проекта (возвращает файлы, строки и фрагменты с совпадениями). Используй его, чтобы найти, где определена функция, переменная или компонент, вместо чтения файлов наугад.
 - <check_image_size path="путь"/> — проверить размеры (width/height) и вес изображения.
@@ -1662,6 +1662,10 @@ function setupAutoUpdaterUI() {
       banner?.querySelector('#updater-dismiss-btn')?.addEventListener('click', close);
     } else if (data.type === 'error') {
       console.warn('[updater] error:', data.message);
+      // Do not show intrusive error banner for typical background network failures like connection reset
+      if (data.message && data.message.includes('ERR_CONNECTION_RESET')) {
+        return;
+      }
       setHTML(`
         <i data-lucide="alert-triangle" style="color: var(--accent-red);"></i>
         <span class="updater-text">${esc(t('Ошибка обновления'))}: ${esc(data.message)}</span>
