@@ -266,6 +266,7 @@ const SYSTEM_PROMPT_BUILD = `${SYSTEM_PROMPT_COMMON}
 2. ИЗМЕНЕНИЕ ФАЙЛОВ (КРИТИЧНО):
    - ДЛЯ НОВЫХ ФАЙЛОВ: Используй <write_file>.
    - ДЛЯ СУЩЕСТВУЮЩИХ ФАЙЛОВ: Использовать <write_file> КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО! Ты обязан использовать СТРОГИЙ SEARCH & REPLACE через <edit_file>.
+   - ДЛЯ ЗАПИСИ И РЕДАКТИРОВАНИЯ ФАЙЛОВ КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать <execute_command> (никаких echo, Set-Content, Out-File, bash/powershell скриптов). Ты ОБЯЗАН использовать ИСКЛЮЧИТЕЛЬНО инструменты <write_file> и <edit_file>.
    - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО выводить готовый код обычным текстом в чат (в markdown блоках). Ты обязан ВСЕГДА использовать инструменты <write_file> или <edit_file> для генерации и изменения кода.
 
 ## ДОСТУПНЫЕ ИНСТРУМЕНТЫ
@@ -1354,6 +1355,9 @@ function parseMarkdown(text: string): string {
   tempText = tempText.replace(listCompRegex, (match) => storePlaceholder(match));
   tempText = tempText.replace(checkImgRegex, (match) => storePlaceholder(match));
   tempText = tempText.replace(orphanToolCloseRegex, '');
+
+  // Escape any remaining raw HTML to prevent the model from injecting unescaped UI elements (like <div class="calculator">)
+  tempText = tempText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   let parsedHtml = '';
   try {
@@ -4743,6 +4747,12 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
   }
 
   if (tool.type === 'execute_command') {
+    const cmdLower = (tool.params.command || '').toLowerCase();
+    const isTryingToWriteFile = cmdLower.includes('set-content') || cmdLower.includes('out-file') || cmdLower.includes('echo') || cmdLower.includes('>') || cmdLower.startsWith('write ') || cmdLower.includes('curl ') || cmdLower.includes('wget ');
+    
+    if (isTryingToWriteFile) {
+      return 'ОШИБКА КРИТИЧЕСКОГО УРОВНЯ: Использование execute_command для записи/создания/изменения файлов или скачивания кода СТРОГО ЗАПРЕЩЕНО! Вы ОБЯЗАНЫ использовать инструменты <write_file> (для новых) или <edit_file> (для существующих). Не пытайтесь обойти это правило.';
+    }
     if (settings.permExec === 'deny') {
       return 'ОШИБКА: Выполнение команд терминала запрещено настройками. Скажите пользователю: «В настройках (кнопка ⚙️ внизу) → раздел «Разрешения», измените «Запуск терминальных команд» на «Спрашивать перед запуском».»';
     }
