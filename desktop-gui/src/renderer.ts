@@ -4208,7 +4208,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         if (fullReasoning) {
           const reasoningContent = bubble.querySelector('.reasoning-content');
           if (reasoningContent) {
-            reasoningContent.innerHTML = parseMarkdown(fullReasoning);
+            reasoningContent.textContent = fullReasoning;
           }
         }
 
@@ -4232,6 +4232,14 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
     let html = parseMarkdown(fullContent);
     html = formatToolTags(html);
     textEl.innerHTML = html;
+    
+    if (fullReasoning) {
+      const reasoningContent = bubble.querySelector('.reasoning-content');
+      if (reasoningContent) {
+        reasoningContent.textContent = fullReasoning;
+      }
+    }
+    
     scrollToBottom();
   };
 
@@ -4406,6 +4414,14 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
     bubble.remove();
   } else {
     textEl.innerHTML = formattedText;
+    
+    if (fullReasoning) {
+      const reasoningContent = bubble.querySelector('.reasoning-content');
+      if (reasoningContent) {
+        reasoningContent.innerHTML = parseMarkdown(fullReasoning);
+      }
+    }
+
     scrollToBottom();
     refreshIcons();
   }
