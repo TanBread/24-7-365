@@ -1805,15 +1805,15 @@ function buildMessageHtml(
 
   let reasoningHtml = '';
   if (isAi && extra?.reasoningContent) {
-    const escapedReasoning = esc(extra.reasoningContent).trim();
-    if (escapedReasoning) {
+    const parsedReasoning = parseMarkdown(extra.reasoningContent.trim());
+    if (parsedReasoning) {
       reasoningHtml = `
         <div class="reasoning-block collapsed">
           <div class="reasoning-header">
             <i data-lucide="brain"></i>
             <span>${esc(t('Размышления'))}</span>
           </div>
-          <div class="reasoning-content">${escapedReasoning}</div>
+          <div class="reasoning-content">${parsedReasoning}</div>
         </div>
       `;
     }
@@ -2403,7 +2403,7 @@ function showResumeCard(reason: string) {
 }
 
 // Show recommendation bubble to switch to Plan mode
-function showPlanSuggestion(userQuery: string) {
+function showPlanSuggestion() {
   const div = document.createElement('div');
   div.className = 'chat-message ai';
   div.innerHTML = `
@@ -2428,7 +2428,11 @@ function showPlanSuggestion(userQuery: string) {
   div.querySelector('.btn-continue-build')?.addEventListener('click', () => {
     div.remove();
     skipPlanSuggestion = true;
-    handleUserMessage(userQuery);
+    setGeneratingState(true);
+    autoCheckpoint(`Перед запуском ${new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`).then(() => {
+      agentStepCount = 0;
+      runAgentStep();
+    });
   });
   
   div.querySelector('.btn-switch-to-plan')?.addEventListener('click', () => {
@@ -2439,7 +2443,11 @@ function showPlanSuggestion(userQuery: string) {
     if (tabBuild) tabBuild.classList.remove('active');
     if (tabPlan) tabPlan.classList.add('active');
     chatInput.placeholder = t('Опишите, что хотите спроектировать и спланировать...');
-    handleUserMessage(userQuery);
+    setGeneratingState(true);
+    autoCheckpoint(`Перед запуском ${new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`).then(() => {
+      agentStepCount = 0;
+      runAgentStep();
+    });
   });
 }
 
@@ -3613,11 +3621,6 @@ async function handleUserMessage(text: string) {
   const queryLower = text.toLowerCase();
   const scratchKeywords = ['с нуля', 'создай', 'сделать проект', 'разработай', 'новый проект', 'создай приложение', 'сделать приложение'];
   const isFirstMessage = !activeProject || activeProject.chatHistory.filter(m => m.role === 'user').length === 0;
-  if (appMode === 'build' && !skipPlanSuggestion && isFirstMessage && scratchKeywords.some(kw => queryLower.includes(kw))) {
-    showPlanSuggestion(text);
-    return;
-  }
-  skipPlanSuggestion = false;
 
   if (!activeProject) {
     const p = createProject(text.slice(0, 40));
@@ -3683,6 +3686,13 @@ contextPayload += '=====================================\n\n';
   activeProject!.chatHistory.push({ role: 'user', content: fullPrompt });
   saveProjects();
   renderSidebarProjects();
+
+  if (appMode === 'build' && !skipPlanSuggestion && isFirstMessage && scratchKeywords.some(kw => queryLower.includes(kw))) {
+    setGeneratingState(false);
+    showPlanSuggestion();
+    return;
+  }
+  skipPlanSuggestion = false;
 
   // Silent auto-checkpoint before the agent modifies anything
   await autoCheckpoint(`Перед запросом ${new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`);
@@ -4194,6 +4204,14 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
         let html = parseMarkdown(fullContent);
         html = formatToolTags(html);
         textEl.innerHTML = html;
+        
+        if (fullReasoning) {
+          const reasoningContent = bubble.querySelector('.reasoning-content');
+          if (reasoningContent) {
+            reasoningContent.innerHTML = parseMarkdown(fullReasoning);
+          }
+        }
+
         // Show partial tool call indicator during streaming
         const partialTools = toolCallsAcc.filter(tc => tc && tc.name && !tc.argsRaw.includes('</'));
         if (partialTools.length > 0 && !textEl.querySelector('.tool-accordion')) {
@@ -4333,10 +4351,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
                 bubble.querySelector('.stream-text')?.before(reasoningBlock);
                 refreshIcons();
               }
-              const reasoningContent = reasoningBlock.querySelector('.reasoning-content');
-              if (reasoningContent) {
-                reasoningContent.textContent = (reasoningContent.textContent || '') + reasoning;
-              }
+              debouncedRender();
               scrollToBottom();
             }
           } catch (e) {
