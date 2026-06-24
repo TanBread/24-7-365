@@ -122,21 +122,21 @@
         <div class="feature-card" id="feat-modes">
           <div class="feature-icon"><i data-lucide="map"></i></div>
           <h3>Plan & Build Modes</h3>
-          <p>In Build mode the agent edits code right away. In Plan mode it drafts a step-by-step checklist, then executes each step with an isolated micro-agent in a shadow workspace — with live progress tracking.</p>
+          <p>In Build mode the agent edits code right away. In Plan mode it drafts a step-by-step checklist, then executes each step with an isolated micro-agent in a secure Git Worktree — with live progress tracking.</p>
         </div>
 
-        <!-- Native Rust Engine -->
+        <!-- Native Rust Engine & LSP -->
         <div class="feature-card" id="feat-engine">
           <div class="feature-icon"><i data-lucide="cpu"></i></div>
-          <h3>Native Rust Engine</h3>
-          <p>An optional bundled Rust core parses real Tree-sitter syntax trees (Rust, TS/JS, Python, HTML, CSS) and ranks workspace code search with BM25. Falls back gracefully to TypeScript when the binary isn't present.</p>
+          <h3>LSP & Native Rust Engine</h3>
+          <p>A bundled Rust core parses real Tree-sitter syntax trees and provides Language Server Protocol (LSP) superpowers like "Go to definition" for flawless, semantic cross-file refactoring.</p>
         </div>
 
         <!-- Real Commands -->
         <div class="feature-card" id="feat-terminal">
           <div class="feature-icon"><i data-lucide="terminal"></i></div>
-          <h3>xterm Terminal with Stdin</h3>
-          <p>The agent runs compilers, installs libraries, answers interactive prompts via stdin, and can stop long-running commands. Output streams live both into chat and a full terminal panel.</p>
+          <h3>node-pty Terminal & Sandbox</h3>
+          <p>Watch real-time terminal output via node-pty integration directly in chat. The agent runs compilers, answers interactive prompts via stdin, and can execute unsafe code inside an isolated Windows Sandbox.</p>
         </div>
         
         <!-- Safety / Diff -->
@@ -222,7 +222,7 @@
         <div class="feature-card">
           <div class="feature-icon"><i data-lucide="list-checks"></i></div>
           <h3>Plan Mode — structured & safe</h3>
-          <p>The agent first proposes a step-by-step plan you can edit and approve. Each step runs in an isolated micro-agent inside a shadow workspace, merged only on success. A sticky progress bar and Tasks tab track every step, with self-healing on build errors.</p>
+          <p>The agent first proposes a step-by-step plan you can edit and approve. Each step runs in an isolated micro-agent inside a dedicated Git Worktree, merged only on success. A sticky progress bar and Tasks tab track every step, with self-healing on build errors.</p>
         </div>
       </div>
     </div>
