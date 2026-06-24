@@ -1798,6 +1798,9 @@ function buildMessageHtml(
     }
   }
 
+  if (isAi) {
+    displayContent = displayContent.replace(/(?:<function=|<tool_call>|<\|tool_call\|>|```tool_call)[\s\S]*/i, '');
+  }
   let formattedText = isAi ? parseMarkdown(displayContent) : esc(displayContent).replace(/\n/g, '<br>');
   if (isAi) {
     formattedText = formatToolTags(formattedText, true, extra?.toolResults);
@@ -4198,7 +4201,10 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
     requestAnimationFrame(() => {
       pendingRender = false;
       
-      let html = parseMarkdown(fullContent);
+      // Clean up leaked tool-calling tokens from some OS models (like Nemotron)
+      let displayContent = fullContent.replace(/(?:<function=|<tool_call>|<\|tool_call\|>|```tool_call)[\s\S]*/i, '');
+      
+      let html = parseMarkdown(displayContent);
       html = formatToolTags(html);
       textEl.innerHTML = html;
       
@@ -4224,7 +4230,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
       
       scrollToBottom();
       
-      if (!fullContent.trim()) {
+      if (!displayContent.trim()) {
         textEl.innerHTML = '<span class="stream-cursor">|</span>';
       }
     });
@@ -4389,7 +4395,8 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
     }
   }
 
-  let formattedText = parseMarkdown(fullContent);
+  let cleanContent = fullContent.replace(/(?:<function=|<tool_call>|<\|tool_call\|>|```tool_call)[\s\S]*/i, '');
+  let formattedText = parseMarkdown(cleanContent);
   formattedText = formatToolTags(formattedText);
 
   const hasAccordion = formattedText.includes('tool-accordion');
