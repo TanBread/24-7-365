@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.0] - 2026-06-24
+### Added
+- **Git Worktree Isolation**: Agents now run in isolated `git worktree` environments instead of shadow workspaces.
+- **Multi-Agent Threads**: Run multiple agents in parallel on different tasks within the same project.
+- **Automated Hooks Engine**: Agents can be triggered automatically upon failed builds or test runs to propose fixes.
+- **Smart Chat & Context Meter**: Added visualization for prompt cache savings and expandable reasoning tokens.
+- **Windows Sandbox Support**: Execute commands natively inside an isolated Windows Sandbox environment.
+- **Popped-out Interface**: Ripgrep-powered semantic search and floating chat windows for better context management.
+- **LSP Integration**: Agent can now utilize "Go to definition" and "Find references" for flawless refactoring.
+- **Interactive PTY Terminal**: Replaced static exec logs with a live `node-pty` and `xterm.js` streaming terminal widget.
+- **Roles / Persona Switcher**: Explicit toggles for "Docs", "Ask", "Plan", and "Build" modes.
+- **Advanced UX Elements**: File `@mentions`, Interactive Inline-Diff blocks, and live context capacity meter.
+- **Session Sharing**: Generate shareable URLs for complex debugging sessions.
+
+### Changed
+- Re-architected `core-backend` with `tower-lsp`, `git2`, and `tokio` for massive concurrency.
+- Upgraded `desktop-gui` to support advanced xterm modules and live PTY streams.
+
 All notable changes to the **7/24 IDE** project will be documented in this file.
 
 ---

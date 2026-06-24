@@ -1,18 +1,23 @@
 <div align="center">
 
 # <img src="icon.png" width="44" height="44" align="center" /> 7/24 IDE
+# <img src="icon.png" width="44" height="44" align="center" /> 7/24 IDE 🚀 — Version 2.0.0 (The Agentic Update)
 
-### **Always On. Always Coding.**
+![Banner](social-preview-banner.png)
 
-**An autonomous, local AI developer agent for Windows.**
-Describe what you want — it reads your files, writes precise edits, runs commands, and shows you a live preview, all inside your own project folder.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
 
-[![Download](https://img.shields.io/badge/Download-v1.5.3-18181b?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
-[![License](https://img.shields.io/badge/License-MIT-3f3f46?style=for-the-badge)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/strmax195-hue/7-24-IDE/ci.yml?branch=main&style=for-the-badge&logo=github)](https://github.com/strmax195-hue/7-24-IDE/actions/workflows/ci.yml)
-[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](../../releases/latest)
+**7/24 IDE** is a fully autonomous, multi-agent AI coding desktop application. It acts as your pair programmer, deeply integrated with your local file system, providing context-aware code generation, automated refactoring, and instant bug fixes.
 
-![7/24 IDE Social Preview](social-preview-banner.png)
+### 🔥 V2.0.0 Key Features
+*   **Git Worktree Isolation:** AI agents operate in lightweight, hidden Git branches. Merge their perfect solutions with an interactive Inline-Diff.
+*   **Multi-Agent Parallelism:** Spawn multiple agents across separate threads within the same project. (e.g. One tests, one builds UI).
+*   **LSP Superpowers:** Agents use "Go to definition" and AST parsing for flawless cross-file refactoring.
+*   **Live PTY Terminal:** Watch real-time terminal output (`node-pty`) directly inside the chat interface. 
+*   **Automated Hooks:** The agent wakes up on failed `npm build` or `git push` to analyze errors and propose fixes.
+*   **Context & Reasoning UI:** Visually track token usage, caching savings, and expand the AI's internal reasoning process.
+*   **Windows Sandbox:** Run unsafe code or dependency installations securely in an isolated environment.
 
 </div>
 

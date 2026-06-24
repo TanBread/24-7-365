@@ -1,6 +1,6 @@
 [package]
 name = "core-backend"
-version = "1.5.2"
+version = "2.0.0"
 edition = "2021"
 description = "Native AST + BM25 search engine for 7/24 IDE"
 license = "MIT"
@@ -28,6 +28,11 @@ tree-sitter-python     = "0.21"
 tree-sitter-html       = "0.20"
 tree-sitter-css        = "0.21"
 tree-sitter-json       = "0.21"
+
+# Advanced capabilities
+git2 = "0.18"
+lsp-types = "0.95"
+tower-lsp = "0.20"
 
 [profile.release]
 opt-level = 3

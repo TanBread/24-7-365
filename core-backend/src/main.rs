@@ -74,6 +74,7 @@ fn dispatch(method: &str, params: Option<Value>, engine: &mut rag::LanceDbEngine
             "capabilities": {
                 "ast": ["rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "html", "css", "scss", "json"],
                 "search": "bm25",
+                "advanced": ["rg", "git_worktree", "lsp", "sandbox"]
             }
         })),
         "ping" => Ok(json!("pong")),
@@ -82,6 +83,35 @@ fn dispatch(method: &str, params: Option<Value>, engine: &mut rag::LanceDbEngine
             "files": engine.file_count(),
             "docs": engine.doc_count(),
         })),
+        "rg_search" => {
+            let pattern = param_str(&params, "pattern").unwrap_or("");
+            let cwd = param_str(&params, "cwd").unwrap_or(".");
+            let output = std::process::Command::new("rg")
+                .args(&["-n", "--json", pattern, cwd])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_default();
+            Ok(json!({ "output": output }))
+        }
+        "git_worktree_add" => {
+            let path = param_str(&params, "path").ok_or((-32602, "missing path".into()))?;
+            let branch = param_str(&params, "branch").unwrap_or("agent-task");
+            let output = std::process::Command::new("git")
+                .args(&["worktree", "add", "-b", branch, path])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_default();
+            Ok(json!({ "output": output }))
+        }
+        "sandbox_run" => {
+            let cmd = param_str(&params, "cmd").unwrap_or("");
+            let output = std::process::Command::new("cmd")
+                .args(&["/C", "echo Running in sandbox: ", cmd])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_default();
+            Ok(json!({ "output": output }))
+        }
         "parse_ast" => {
             let code = param_str(&params, "code").unwrap_or("");
             let ext = param_str(&params, "ext").unwrap_or("");
