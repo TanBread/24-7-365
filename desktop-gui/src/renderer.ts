@@ -6131,6 +6131,24 @@ $('#btn-clear-all-data').addEventListener('click', async () => {
   }
 });
 
+// Check for updates button
+$('#check-updates-btn')?.addEventListener('click', async () => {
+  const btn = $('#check-updates-btn') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = t('Проверка...');
+  try {
+    const result = await window.electronAPI.updaterCheck();
+    if (result.ok && result.version) {
+      btn.textContent = `${t('Доступно')}: v${result.version}`;
+    } else {
+      btn.textContent = t('Обновлений нет');
+    }
+  } catch {
+    btn.textContent = t('Ошибка');
+  }
+  setTimeout(() => { btn.disabled = false; btn.textContent = t('Проверить обновления'); }, 3000);
+});
+
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === ',') { e.preventDefault(); if (settingsPage.classList.contains('hidden')) openSettings(); else closeSettings(); }

@@ -424,6 +424,11 @@ const DICT: Record<string, [string, string]> = {
   'Обновление загружено': ['Update downloaded', '更新已下载'],
   'Перезапустите для установки': ['Restart to install', '重启以安装'],
   'Перезапустить': ['Restart', '重启'],
+  'Проверить обновления': ['Check for updates', '检查更新'],
+  'Проверить наличие обновлений на GitHub': ['Check for updates on GitHub', '在 GitHub 上检查更新'],
+  'Проверка...': ['Checking...', '检查中...'],
+  'Обновлений нет': ['No updates available', '没有可用更新'],
+  'Доступно': ['Available', '可用'],
 
   // ─── v1.2.2 Refinements ───
   'Остановить': ['Stop', '停止'],

@@ -1075,10 +1075,10 @@ function setupAutoUpdater() {
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(err => console.warn('[updater] check failed:', err?.message || err));
   }, 4000);
-  // Recurring check every 6 hours
+  // Recurring check every 5 minutes
   setInterval(() => {
     autoUpdater.checkForUpdates().catch(err => console.warn('[updater] check failed:', err?.message || err));
-  }, 6 * 60 * 60 * 1000);
+  }, 5 * 60 * 1000);
 }
 
 ipcMain.handle('updater-check', async () => {
