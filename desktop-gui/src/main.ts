@@ -38,7 +38,7 @@ let serverSandboxEnabled = true;
 
 // ─── Command safety ─────────────────────────────────────────────────────────
 // Block dangerous commands that could destroy data outside the workspace.
-const DANGEROUS_CMD_RE = /\b(format|shutdown|reboot|del\s+\/[sSqQ]|rmdir\s+\/[sS]|rd\s+\/[sS]|rm\s+-rf\s+\/)\b/i;
+const DANGEROUS_CMD_RE = /\b(format|shutdown|reboot|del\s+\/[sSqQ]|rmdir\s+\/[sS]|rd\s+\/[sS]|rm\s+-rf\s*\/|rm\s+-rf\s+\/|Remove-Item\s+-Recurse\s+-Force\s+[A-Z]:|Set-Content\s+[A-Z]:\\|Out-File\s+[A-Z]:\\)\b|^\s*(del|erase|rmdir|rd|rm)\s+[A-Z]:\\/i;
 
 function isDangerousCommand(command: string): boolean {
   return DANGEROUS_CMD_RE.test(command);
@@ -82,22 +82,26 @@ async function ensureCoreEngine(): Promise<CoreEngineClient | null> {
     })
     .finally(() => {
       // Allow future ensure() calls to retry after a clean stop.
-      if (!coreEngine) coreEngineStartPromise = null;
+      // Only clear the promise if coreEngine is still null (no new instance was created).
+      const engine = coreEngine;
+      if (!engine) coreEngineStartPromise = null;
     });
   await coreEngineStartPromise;
   return coreEngine && coreEngine.isReady ? coreEngine : null;
 }
 
 async function reinitMcpServers(servers: any[]) {
-  // Stop all active servers
+  // Stop all active servers — only clear if all stops succeed
+  let allStopped = true;
   for (const client of activeMcpClients.values()) {
     try {
       await client.stop();
     } catch (err) {
       console.error('Error stopping MCP client:', err);
+      allStopped = false;
     }
   }
-  activeMcpClients.clear();
+  if (allStopped) activeMcpClients.clear();
 
   // Start active servers
   for (const s of servers) {
@@ -136,7 +140,12 @@ ipcMain.handle('secure-key-set', async (_event, apiKey: string) => {
       await fs.promises.writeFile(file, encrypted);
     } else {
       // Fallback: store as-is (encryption unavailable on this OS/session)
+      console.warn('[secure-key] Encryption unavailable — API key stored as plaintext');
       await fs.promises.writeFile(file, Buffer.from('PLAIN:' + apiKey, 'utf-8'));
+      // Notify renderer so it can warn the user
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater-status', { type: 'error', message: 'API key stored as plaintext — encryption unavailable on this system' });
+      }
     }
     return true;
   } catch (err) {
@@ -1052,7 +1061,9 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.forceDevUpdateConfig = false;
 
-  // Disable signature verification on Windows for self-signed or unsigned setups
+  // Required for unsigned/self-signed installers on Windows.
+  // Without this, electron-updater blocks updates when no code signing cert is present.
+  // Safe because updates are fetched over HTTPS from GitHub Releases.
   (autoUpdater as any).verifyUpdateCodeSignature = async () => {
     return null;
   };

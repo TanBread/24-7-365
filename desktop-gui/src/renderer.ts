@@ -506,6 +506,7 @@ let planApproved = false;
 let skipPlanSuggestion = false;
 let currentStepIndex = -1;
 let isExecutingPlan = false;
+let activePlanId = '';
 interface PlanStep {
   text: string;
   enabled: boolean;
@@ -618,6 +619,7 @@ async function loadSecureApiKey() {
 // ─── Persistent storage (with localStorage → main-process migration) ───
 let projectsLoaded = false;
 let saveProjectsTimer: any = null;
+let modelRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
 async function loadProjects() {
   try {
@@ -867,7 +869,7 @@ function populateModelSelect(models: ModelInfo[], selectedId?: string) {
       const priceTag = m.isFree ? '[FREE]' : '[PAID]';
       const catTag = m.category === 'coding' ? '[CODING]' : m.category === 'creative' ? '[CREATIVE]' : '[GENERAL]';
       const ctxInfo = m.contextLength ? ` · ${(m.contextLength / 1000).toFixed(0)}K` : '';
-      const priceInfo = !m.isFree && m.priceCompletion > 0 ? ` · $${(m.priceCompletion * 1000000).toFixed(2)}/M` : '';
+      const priceInfo = !m.isFree && m.priceCompletion && m.priceCompletion > 0 ? ` · $${(m.priceCompletion * 1000000).toFixed(2)}/M` : '';
       o.textContent = `${m.name} ${priceTag} ${catTag}${ctxInfo}${priceInfo}`;
       if (m.id === selectedId) o.selected = true;
       og.appendChild(o);
@@ -1513,8 +1515,8 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
       if (sMatch) search = sMatch[1];
       if (rMatch) replace = rMatch[1];
       
-      const removedCount = search ? Math.max(0, search.split('\n').filter(l => l.trim()).length - (search.endsWith('\n') ? 0 : 0)) : 0;
-      const addedCount = replace ? Math.max(0, replace.split('\n').filter(l => l.trim()).length - (replace.endsWith('\n') ? 0 : 0)) : 0;
+      const removedCount = search ? search.split('\n').filter(l => l.trim()).length : 0;
+      const addedCount = replace ? replace.split('\n').filter(l => l.trim()).length : 0;
       if (removedCount > 0 || addedCount > 0) {
         diffStats = `<span class="diff-stats">${addedCount > 0 ? `+${addedCount}` : ''}${removedCount > 0 ? (addedCount > 0 ? ' ' : '') : ''}${removedCount > 0 ? `-${removedCount}` : ''}</span>`;
       }
@@ -2536,9 +2538,9 @@ function renderPlanStepElement(planId: string, idx: number, listContainer: HTMLE
   });
 
   btnDelete?.addEventListener('click', () => {
-    stepItem.remove();
     planSteps[idx].enabled = false;
     savePlanSteps();
+    renderTasksUI();
   });
 
   btnEdit?.addEventListener('click', () => {
@@ -2605,6 +2607,7 @@ function renderPlanWidgetInChat(steps: string[]) {
   div.className = 'chat-message ai';
 
   const planId = genId();
+  activePlanId = planId;
   div.id = `plan-widget-message-${planId}`;
 
   div.innerHTML = `
@@ -4032,8 +4035,7 @@ async function runAgentStep() {
         }
       } else if (isExecutingPlan && currentStepIndex !== -1) {
         // Automatically advance steps if agent finished the step
-        const planId = document.querySelector('.plan-widget')?.id?.replace('plan-widget-', '') || '';
-        markStepCompleted(planId, currentStepIndex);
+        markStepCompleted(activePlanId, currentStepIndex);
       } else if (!isExecutingPlan && buildSessionWroteFiles) {
         // Self-learning: after a Build session that actually changed files,
         // run a lightweight reflection to capture a reusable skill.
@@ -4165,7 +4167,7 @@ async function streamChatCompletionWithFallback(messages: any[]) {
     // same provider with the same broken key would just fail again. Surface
     // the error to the user instead of swallowing it via fallback.
     const msg = String(err?.message || '');
-    if (/401|unauthorized|403/i.test(msg)) throw err;
+    if (/401|unauthorized|403|429|rate.?limit/i.test(msg)) throw err;
     const fb = settings.fallbackModel;
     if (!fb || fb === primary) throw err;
     appendBubble(t('Система'), `⚠️ ${primary}: ${err.message}. ${t('Переключаюсь на резервную модель')} → ${fb}`, true);
@@ -4265,6 +4267,10 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
       setCurrentAction(t('⏳ Продолжение генерации...'));
     }
 
+    // Abort any lingering fetch from a previous iteration before starting a new one.
+    if (activeAbortController) {
+      try { activeAbortController.abort(); } catch {}
+    }
     const abortController = createAbortController();
     try {
       const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
@@ -4476,6 +4482,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
 // ═══════════════════════════════════════════
 let term: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
+let termObserver: MutationObserver | null = null;
 let terminalHasContent = false;
 
 function initTerminal() {
@@ -4508,12 +4515,13 @@ function initTerminal() {
   });
 
   // Watch for tab visibility changes
-  const observer = new MutationObserver(() => {
+  if (termObserver) termObserver.disconnect();
+  termObserver = new MutationObserver(() => {
     if (document.getElementById('terminal-view')?.style.display !== 'none') {
       setTimeout(() => fitAddon?.fit(), 50);
     }
   });
-  observer.observe(document.getElementById('terminal-view')!, { attributes: true, attributeFilter: ['style'] });
+  termObserver.observe(document.getElementById('terminal-view')!, { attributes: true, attributeFilter: ['style'] });
 }
 
 function appendTerminal(stream: string, chunk: string) {
@@ -5194,6 +5202,9 @@ function requestWritePermissionWithDiff(filePath: string, oldContent: string, ne
       btnReject.removeEventListener('click', handleReject);
       btnClose.removeEventListener('click', handleReject);
       modal.removeEventListener('click', handleBackdrop);
+      document.removeEventListener('keydown', handleEscape);
+      btnClose.removeEventListener('click', handleReject);
+      modal.removeEventListener('click', handleBackdrop);
     };
 
     const handleApprove = () => {
@@ -5213,10 +5224,15 @@ function requestWritePermissionWithDiff(filePath: string, oldContent: string, ne
       if (e.target === modal) handleReject();
     };
 
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleReject();
+    };
+
     btnApprove.addEventListener('click', handleApprove);
     btnReject.addEventListener('click', handleReject);
     btnClose.addEventListener('click', handleReject);
     modal.addEventListener('click', handleBackdrop);
+    document.addEventListener('keydown', handleEscape);
   });
 }
 
@@ -6111,6 +6127,7 @@ $('#btn-clear-all-data').addEventListener('click', async () => {
   try {
     // Stop any pending debounced project save so it can't rewrite data after the wipe.
     if (saveProjectsTimer) { clearTimeout(saveProjectsTimer); saveProjectsTimer = null; }
+    projectsLoaded = false;
     projects = [];
     activeProject = null;
 
@@ -6473,7 +6490,6 @@ function init() {
   } else {
     startApp();
   }
-  loadActiveProject();
   loadRecentFolders();
   updateModelLabel(); 
   updateSetupBanner();
@@ -6520,7 +6536,8 @@ function init() {
       refreshModelsInBackground();
     }
     // Periodic refresh: every 6 hours while the app is open
-    setInterval(refreshModelsInBackground, 6 * 60 * 60 * 1000);
+    if (modelRefreshInterval) clearInterval(modelRefreshInterval);
+    modelRefreshInterval = setInterval(refreshModelsInBackground, 6 * 60 * 60 * 1000);
   });
 
   // Mode toggles
