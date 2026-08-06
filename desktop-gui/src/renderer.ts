@@ -171,18 +171,18 @@ function validateCodeSyntax(filepath: string, content: string): { valid: boolean
           new Function(js);
         } catch (err: any) {
           if (!js.includes(':') && !js.includes('<')) {
-            return { valid: false, error: `Синтаксическая ошибка в <script>: ${err.message}` };
+            return { valid: false, error: `${t('Синтаксическая ошибка в <script>:')} ${err.message}` };
           }
         }
       }
     } catch (e: any) {
-      return { valid: false, error: `Ошибка парсинга HTML: ${e.message}` };
+      return { valid: false, error: `${t('Ошибка парсинга HTML:')} ${e.message}` };
     }
   } else if (ext === 'js') {
     try {
       new Function(content);
     } catch (err: any) {
-      return { valid: false, error: `Синтаксическая ошибка JS: ${err.message}` };
+      return { valid: false, error: `${t('Синтаксическая ошибка JS:')} ${err.message}` };
     }
   }
   return { valid: true };
@@ -380,7 +380,7 @@ async function fetchModels(providerOrKey?: string, url?: string, key?: string): 
       }
       return result;
     } catch (err: any) {
-      if (modelsStatus) modelsStatus.textContent = `Ошибка: ${err.message}`;
+      if (modelsStatus) modelsStatus.textContent = `${t('Ошибка:')} ${err.message}`;
       console.warn('Failed to fetch Ollama models, fallback empty:', err);
       return [];
     }
@@ -447,7 +447,7 @@ async function fetchModels(providerOrKey?: string, url?: string, key?: string): 
       }
       return result;
     } catch (err: any) {
-      if (modelsStatus) modelsStatus.textContent = `Ошибка: ${err.message}`;
+      if (modelsStatus) modelsStatus.textContent = `${t('Ошибка:')} ${err.message}`;
       return [];
     }
   }
@@ -467,7 +467,7 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
       if ((resp.status === 429 || resp.status >= 500) && attempt < maxRetries) {
         const retryAfter = parseFloat(resp.headers.get('retry-after') || '0');
         const backoff = retryAfter > 0 ? retryAfter * 1000 : Math.min(1000 * Math.pow(2, attempt), 8000) + Math.random() * 400;
-        setCurrentAction(`⏳ ${resp.status === 429 ? 'Лимит запросов' : 'Сбой сервера'} — повтор через ${(backoff / 1000).toFixed(1)}с (попытка ${attempt + 1}/${maxRetries})...`);
+        setCurrentAction(`⏳ ${resp.status === 429 ? t('Лимит запросов') : t('Сбой сервера')} — ${t('повтор через')} ${(backoff / 1000).toFixed(1)}${t('с')} (${t('попытка')} ${attempt + 1}/${maxRetries})...`);
         await sleep(backoff);
         continue;
       }
@@ -478,7 +478,7 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
       lastError = err;
       if (attempt < maxRetries) {
         const backoff = Math.min(1000 * Math.pow(2, attempt), 8000) + Math.random() * 400;
-        setCurrentAction(`⏳ Ошибка сети — повтор через ${(backoff / 1000).toFixed(1)}с (попытка ${attempt + 1}/${maxRetries})...`);
+        setCurrentAction(`⏳ ${t('Ошибка сети')} — ${t('повтор через')} ${(backoff / 1000).toFixed(1)}${t('с')} (${t('попытка')} ${attempt + 1}/${maxRetries})...`);
         await sleep(backoff);
         continue;
       }
@@ -507,6 +507,13 @@ let settings: AppSettings = {
   ollamaContextSize: 4096,
   mcpServers: [],
 };
+function getLocale(): string {
+  const lang = settings.language || 'ru';
+  if (lang === 'en') return 'en-US';
+  if (lang === 'zh') return 'zh-CN';
+  return 'ru-RU';
+}
+
 let projects: Project[] = [];
 let activeProject: Project | null = null;
 let recentFolders: string[] = [];
@@ -1086,7 +1093,7 @@ function maybeShowResumeOnLoad() {
   if (!last) return;
   const interrupted = last.role === 'user' || (last.role === 'system' && last.content.startsWith('[Результат выполнения инструментов]'));
   if (interrupted) {
-    showResumeCard('Предыдущий ответ не был завершён.');
+    showResumeCard(t('Предыдущий ответ не был завершён.'));
   }
 }
 
@@ -1103,6 +1110,7 @@ function renderAgentTabs() {
 
 function renderSidebarProjects() {
   sidebarProjectsList.innerHTML = '';
+  sidebarProjectsList.dataset.emptyText = t('Нет проектов');
 
   // The `hidden` class lives on the wrapper, not the input itself.
   const searchBox = document.getElementById('sidebar-search-box');
@@ -1151,7 +1159,7 @@ function renderSidebarProjects() {
     // Delete chat
     item.querySelector('.delete-project')?.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await confirmDialog('Удалить этот чат?', 'Удаление чата');
+      const ok = await confirmDialog(t('Удалить этот чат?'), t('Удаление чата'));
       if (ok) {
         const wasActive = activeProject?.id === p.id;
         projects = projects.filter(x => x.id !== p.id);
@@ -1480,7 +1488,7 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
     const statusClassVal = isHistory ? (failedStatus ? 'failed' : 'success') : statusClassLive;
 
     const statusIcon = isHistory ? (failedStatus ? 'alert-circle' : 'check-circle-2') : (idx === 0 ? 'loader-2' : 'circle');
-    const statusText = isHistory ? (failedStatus ? 'Ошибка' : 'Выполнено') : (idx === 0 ? 'Запуск...' : 'Ожидает');
+    const statusText = isHistory ? (failedStatus ? t('Ошибка') : t('Выполнено')) : (idx === 0 ? t('Запуск...') : t('Ожидает'));
 
     let accordionBody = '';
     let diffStats = '';
@@ -1556,41 +1564,41 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
   // Replace each raw XML tag in order. Attribute parsing accepts both quote styles.
   html = html.replace(/<read_dir\b([^>]*)\s*(?:\/>|>\s*<\/read_dir>|>)/g, (match, attrsRaw) => {
     const path = parseXmlAttrs(attrsRaw).path || '.';
-    return replaceTag(match, 'read_dir', `Просмотр папки: ${path}`, '');
+    return replaceTag(match, 'read_dir', t('Просмотр папки') + ': ' + path, '');
   });
 
   html = html.replace(/<read_file\b([^>]*)\s*(?:\/>|>\s*<\/read_file>|>)/g, (match, attrsRaw) => {
     const path = parseXmlAttrs(attrsRaw).path || '';
-    return replaceTag(match, 'read_file', `Чтение файла: ${path}`, '');
+    return replaceTag(match, 'read_file', t('Чтение файла') + ': ' + path, '');
   });
 
   html = html.replace(/<execute_command\b([^>]*)\s*(?:\/>|>\s*<\/execute_command>|>)/g, (match, attrsRaw) => {
     const command = parseXmlAttrs(attrsRaw).command || '';
-    return replaceTag(match, 'execute_command', `Запуск команды: ${command}`, '');
+    return replaceTag(match, 'execute_command', t('Запуск команды') + ': ' + command, '');
   });
 
   html = html.replace(/<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|(?=<write_file\b)|$)/g, (match, attrsRaw, content) => {
     const path = parseXmlAttrs(attrsRaw).path || '';
-    return replaceTag(match, 'write_file', `Создание файла: ${path}`, content);
+    return replaceTag(match, 'write_file', t('Создание файла') + ': ' + path, content);
   });
 
   html = html.replace(/<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|(?=<edit_file\b)|$)/g, (match, attrsRaw, inner) => {
     const path = parseXmlAttrs(attrsRaw).path || '';
-    return replaceTag(match, 'edit_file', `Правка файла: ${path}`, inner);
+    return replaceTag(match, 'edit_file', t('Правка файла') + ': ' + path, inner);
   });
 
   html = html.replace(/<search_code\b([^>]*)\s*(?:\/>|>\s*<\/search_code>|>)/g, (match, attrsRaw) => {
     const query = parseXmlAttrs(attrsRaw).query || '';
-    return replaceTag(match, 'search_code', `Поиск в коде: ${query}`, '');
+    return replaceTag(match, 'search_code', t('Поиск в коде') + ': ' + query, '');
   });
 
   html = html.replace(/<list_components\s*(?:\/>|>\s*<\/list_components>|>)/g, (match) => {
-    return replaceTag(match, 'list_components', `Список компонентов проекта`, '');
+    return replaceTag(match, 'list_components', t('Список компонентов проекта'), '');
   });
 
   html = html.replace(/<check_image_size\b([^>]*)\s*(?:\/>|>\s*<\/check_image_size>|>)/g, (match, attrsRaw) => {
     const path = parseXmlAttrs(attrsRaw).path || '';
-    return replaceTag(match, 'check_image_size', `Проверка изображения: ${path}`, '');
+    return replaceTag(match, 'check_image_size', t('Проверка изображения') + ': ' + path, '');
   });
 
   html = html.replace(/<\/(?:read_dir|read_file|write_file|edit_file|execute_command|search_code|list_components|check_image_size)>/g, '');
@@ -2113,7 +2121,7 @@ async function refreshWorkspaceFilesUI() {
     refreshIcons();
   } catch (err: any) {
     updateLowcodeContextCounts([]);
-    filesList.innerHTML = `<div style="padding:20px; text-align:center; color:var(--accent-red);">${esc('Ошибка чтения директории')}: ${esc(err.message || String(err))}</div>`;
+    filesList.innerHTML = `<div style="padding:20px; text-align:center; color:var(--accent-red);">${esc(t('Ошибка чтения директории'))}: ${esc(err.message || String(err))}</div>`;
   }
 }
 
@@ -2387,8 +2395,8 @@ function startInlineRename(p: Project, itemElement: HTMLElement) {
 function showResumeCard(reason: string) {
   const isNetwork = /failed to fetch|networkerror|network|fetch|таймаут|timeout|econn|enotfound|socket|aborted/i.test(reason || '');
   const friendly = isNetwork
-    ? 'Соединение с провайдером прервалось. Контекст диалога сохранён — можно продолжить с того же места.'
-    : `Генерация прервана: ${reason}. Контекст сохранён — можно повторить.`;
+    ? t('Соединение с провайдером прервалось. Контекст диалога сохранён — можно продолжить с того же места.')
+    : `${t('Генерация прервана:')} ${reason}. ${t('Контекст сохранён — можно повторить.')}`;
 
   const div = document.createElement('div');
   div.className = 'chat-message ai';
@@ -2441,7 +2449,7 @@ function showPlanSuggestion() {
     div.remove();
     skipPlanSuggestion = true;
     setGeneratingState(true);
-    autoCheckpoint(`Перед запуском ${new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`).then(() => {
+    autoCheckpoint(`Перед запуском ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`).then(() => {
       agentStepCount = 0;
       runAgentStep();
     });
@@ -2456,7 +2464,7 @@ function showPlanSuggestion() {
     if (tabPlan) tabPlan.classList.add('active');
     chatInput.placeholder = t('Опишите, что хотите спроектировать и спланировать...');
     setGeneratingState(true);
-    autoCheckpoint(`Перед запуском ${new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`).then(() => {
+    autoCheckpoint(`Перед запуском ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`).then(() => {
       agentStepCount = 0;
       runAgentStep();
     });
@@ -2703,8 +2711,8 @@ async function executeNextStep(planId: string) {
   // Auto-snapshot before first step execution
   if (nextIdx === 0) {
     try {
-      const autoName = `Авто-снапшот перед сборкой ${new Date().toLocaleString('ru')}`;
-      await createSnapshot(autoName, 'Автоматический снапшот перед выполнением плана.');
+      const autoName = `${t('Авто-снапшот перед сборкой')} ${new Date().toLocaleString(getLocale())}`;
+      await createSnapshot(autoName, t('Автоматический снапшот перед выполнением плана.'));
     } catch (err) {
       console.warn('Auto-snapshot failed (non-critical):', err);
     }
@@ -3701,7 +3709,7 @@ contextPayload += '=====================================\n\n';
   skipPlanSuggestion = false;
 
   // Silent auto-checkpoint before the agent modifies anything
-  await autoCheckpoint(`Перед запросом ${new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`);
+  await autoCheckpoint(`Перед запросом ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`);
 
   agentStepCount = 0;
   runAgentStep();
@@ -3745,7 +3753,7 @@ function startEditMessage(msgEl: HTMLElement) {
 
   const btns = document.createElement('div');
   btns.className = 'edit-actions-inline';
-  btns.innerHTML = '<button class="btn-cancel-edit">Отмена</button><button class="btn-save-edit">Отправить</button>';
+  btns.innerHTML = `<button class="btn-cancel-edit">${t('Отмена')}</button><button class="btn-save-edit">${t('Отправить')}</button>`;
   input.after(btns);
 
   // Hide action bar while editing
@@ -4079,7 +4087,7 @@ async function executeToolsSequentially(tools: AgentTool[]) {
       const statusEl = accordion.querySelector('.tool-accordion-status');
       if (statusEl) {
         statusEl.className = 'tool-accordion-status running';
-        statusEl.innerHTML = '<i data-lucide="loader-2"></i> <span>Запуск...</span>';
+        statusEl.innerHTML = `<i data-lucide="loader-2"></i> <span>${t('Запуск...')}</span>`;
         refreshIcons();
       }
     }
@@ -4110,7 +4118,7 @@ async function executeToolsSequentially(tools: AgentTool[]) {
 
       if (statusEl) {
         statusEl.className = `tool-accordion-status ${failedStatus ? 'failed' : 'success'}`;
-        statusEl.innerHTML = `<i data-lucide="${failedStatus ? 'alert-circle' : 'check-circle-2'}"></i> <span>${failedStatus ? 'Ошибка' : 'Выполнено'}</span>`;
+        statusEl.innerHTML = `<i data-lucide="${failedStatus ? 'alert-circle' : 'check-circle-2'}"></i> <span>${failedStatus ? t('Ошибка') : t('Выполнено')}</span>`;
       }
       
       if (tool.type !== 'edit_file' && contentEl) {
@@ -5154,7 +5162,7 @@ function buildSideBySideDiff(filePath: string, oldContent: string, newContent: s
       });
     } else {
       const c = document.getElementById('monaco-diff-container');
-      if (c) c.innerHTML = '<div style="padding:20px; color:red;">Ошибка загрузки редактора (Monaco loader not found)</div>';
+      if (c) c.innerHTML = `<div style="padding:20px; color:red;">${t('Ошибка загрузки редактора')} (Monaco loader not found)</div>`;
     }
   }
 }
@@ -5296,7 +5304,7 @@ sidebarFolderPath.addEventListener('click', async () => {
 // Clear folder button
 btnSidebarClearFolder.addEventListener('click', async () => {
   if (!activeProject) return;
-  const ok = await confirmDialog('Открепить рабочую папку от этого проекта?', 'Открепление папки');
+  const ok = await confirmDialog(t('Открепить рабочую папку от этого проекта?'), t('Открепление папки'));
   if (ok) {
     activeProject.workspacePath = '';
     activeProject.scopePath = '';
@@ -5554,7 +5562,7 @@ initLowcodeContextPanelClicks();
 document.getElementById('btn-chat-detach-context')?.addEventListener('click', async (e) => {
   e.stopPropagation();
   if (!activeProject) return;
-  const ok = await confirmDialog('Открепить рабочую папку от этого проекта?', 'Открепление папки');
+  const ok = await confirmDialog(t('Открепить рабочую папку от этого проекта?'), t('Открепление папки'));
   if (ok) {
     activeProject.workspacePath = '';
     activeProject.scopePath = '';
@@ -5770,7 +5778,7 @@ function toggleInspectMode(forceVal?: boolean) {
       hint = document.createElement('div');
       hint.id = 'inspect-hint';
       hint.style.cssText = 'position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:100; background:var(--accent-purple); color:#fff; padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; pointer-events:none; box-shadow:0 2px 8px rgba(0,0,0,0.15); display:flex; align-items:center; gap:6px;';
-      hint.innerHTML = '<i data-lucide="mouse-pointer-2"></i> Кликните на любой элемент в превью, чтобы выбрать его';
+      hint.innerHTML = `<i data-lucide="mouse-pointer-2"></i> ${t('Кликните на любой элемент в превью, чтобы выбрать его')}`;
       document.getElementById('iframe-wrapper')?.appendChild(hint);
       refreshIcons();
     }
@@ -7901,7 +7909,7 @@ async function runReflection() {
   if (!activeProject || !settings.model) return;
   if (!settings.apiKey && settings.llmProvider !== 'ollama') return;
 
-  const time = new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+  const time = new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' });
   const bubble = document.createElement('div');
   bubble.className = 'chat-message ai';
   bubble.innerHTML = `
@@ -8253,7 +8261,7 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
           if (tool.type === 'execute_command') {
             microHistory.push({
               role: 'user',
-              content: 'Произошла ошибка сборки при запуске команды. Исправь файлы кода, чтобы сборка проходила успешно.'
+              content: t('Произошла ошибка сборки при запуске команды. Исправь файлы кода, чтобы сборка проходила успешно.')
             });
           }
         }
@@ -8461,7 +8469,7 @@ function showSnapshotDialog() {
       </h3>
       <div style="margin-bottom:10px;">
         <label style="font-size:11px; color:var(--text-secondary); display:block; margin-bottom:3px;">${t('Название')}</label>
-        <input id="snapshot-dialog-name" class="setting-input" style="width:100%;" placeholder="${t('Например: Перед рефакторингом')}" value="${t('Веха от')} ${new Date().toLocaleTimeString('ru')}" />
+        <input id="snapshot-dialog-name" class="setting-input" style="width:100%;" placeholder="${t('Например: Перед рефакторингом')}" value="${t('Веха от')} ${new Date().toLocaleTimeString(getLocale())}" />
       </div>
       <div style="margin-bottom:14px;">
         <label style="font-size:11px; color:var(--text-secondary); display:block; margin-bottom:3px;">${t('Описание (необязательно)')}</label>
@@ -8481,7 +8489,7 @@ function showSnapshotDialog() {
   backdrop.querySelector('#snapshot-dialog-confirm')?.addEventListener('click', async () => {
     const nameInput = backdrop.querySelector('#snapshot-dialog-name') as HTMLInputElement;
     const descInput = backdrop.querySelector('#snapshot-dialog-desc') as HTMLInputElement;
-    const name = nameInput?.value?.trim() || `Веха от ${new Date().toLocaleTimeString('ru')}`;
+    const name = nameInput?.value?.trim() || `Веха от ${new Date().toLocaleTimeString(getLocale())}`;
     const desc = descInput?.value?.trim() || '';
     backdrop.remove();
     await createSnapshot(name, desc);
@@ -8512,7 +8520,7 @@ async function autoCheckpoint(label: string) {
     const snap: ProjectSnapshot = {
       id: genId(),
       name: `⚡ ${label}`,
-      desc: 'Автоматический чекпоинт перед действием агента (можно откатиться).',
+      desc: t('Автоматический чекпоинт перед действием агента (можно откатиться).'),
       timestamp: Date.now(),
       planSteps: JSON.parse(JSON.stringify(planSteps)),
       files: filesData,
@@ -8562,7 +8570,7 @@ async function createSnapshot(name: string, desc: string) {
 
     const newSnapshot: ProjectSnapshot = {
       id: genId(),
-      name: name || `Веха от ${new Date().toLocaleTimeString('ru')}`,
+      name: name || `Веха от ${new Date().toLocaleTimeString(getLocale())}`,
       desc: desc || `Снапшот состояния файлов проекта и текущего плана.`,
       timestamp: Date.now(),
       planSteps: JSON.parse(JSON.stringify(planSteps)),
@@ -8585,7 +8593,7 @@ async function createSnapshot(name: string, desc: string) {
 async function rollbackToSnapshot(snapshotId: string) {
   if (!activeProject || !activeProject.workspacePath) return;
 
-  const confirmRollback = await confirmDialog('Вы уверены, что хотите откатиться к этому снапшоту? Текущие несохраненные изменения будут перезаписаны.', 'Откат снапшота');
+  const confirmRollback = await confirmDialog(t('Вы уверены, что хотите откатиться к этому снапшоту? Текущие несохраненные изменения будут перезаписаны.'), t('Откат снапшота'));
   if (!confirmRollback) return;
 
   showThinking();
@@ -8636,7 +8644,7 @@ async function rollbackToSnapshot(snapshotId: string) {
 }
 
 async function deleteSnapshot(snapshotId: string) {
-  const confirmDelete = await confirmDialog('Удалить этот снапшот?', 'Удаление снапшота');
+  const confirmDelete = await confirmDialog(t('Удалить этот снапшот?'), t('Удаление снапшота'));
   if (!confirmDelete) return;
 
   try {
@@ -8654,7 +8662,7 @@ async function renderSnapshotsUI() {
   if (!container) return;
 
   if (!activeProject || !activeProject.workspacePath) {
-    container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted);">Папка проекта не выбрана. Снапшоты недоступны.</div>';
+    container.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted);">${t('Папка проекта не выбрана. Снапшоты недоступны.')}</div>`;
     return;
   }
 
@@ -8680,7 +8688,7 @@ async function renderSnapshotsUI() {
     card.innerHTML = `
       <div class="snapshot-card-header">
         <span class="snapshot-card-title">${esc(snap.name)}</span>
-        <span class="snapshot-card-time">${new Date(snap.timestamp).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ${new Date(snap.timestamp).toLocaleDateString('ru')}</span>
+        <span class="snapshot-card-time">${new Date(snap.timestamp).toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ${new Date(snap.timestamp).toLocaleDateString(getLocale())}</span>
       </div>
       <div class="snapshot-card-desc">
         ${esc(snap.desc)}

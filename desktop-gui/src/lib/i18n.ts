@@ -584,6 +584,20 @@ const DICT: Record<string, [string, string]> = {
   'Поиск': ['Search', '搜索'],
   'Компоненты': ['Components', '组件'],
   'Изображение': ['Image', '图片'],
+
+  // ─── Tool operation labels ───
+  'Чтение файла': ['Read file', '读取文件'],
+  'Запуск команды': ['Run command', '运行命令'],
+  'Создание файла': ['Create file', '创建文件'],
+  'Правка файла': ['Edit file', '编辑文件'],
+  'Поиск в коде': ['Search code', '搜索代码'],
+  'Список компонентов проекта': ['List project components', '列出项目组件'],
+  'Проверка изображения': ['Check image', '检查图片'],
+
+  // ─── Tool status labels ───
+  'Выполнено': ['Done', '已完成'],
+  'Запуск...': ['Running...', '运行中...'],
+  'Ожидает': ['Pending', '等待中'],
   'Агент вывел код текстом — переспрашиваю': ['Agent printed code as text — re-asking', '智能体以文本形式输出代码 — 重新询问'],
   'действий': ['actions', '次操作'],
   'шагов': ['steps', '步'],
@@ -595,6 +609,29 @@ const DICT: Record<string, [string, string]> = {
 
   // ─── v1.4.2: Resume / status ───
   'Соединение с провайдером прервалось. Контекст диалога сохранён — можно продолжить с того же места.': ['Connection to the provider was lost. The conversation context is preserved — you can resume from the same point.', '与提供商的连接已断开。对话上下文已保存，可以从同一位置继续。'],
+
+  // ─── Hardcoded Russian strings (confirm dialogs, errors, snapshots) ───
+  'Предыдущий ответ не был завершён.': ['Previous response was not completed.', '上一个回答未完成。'],
+  'Генерация прервана:': ['Generation interrupted:', '生成已中断：'],
+  'Контекст сохранён — можно повторить.': ['Context saved — you can retry.', '上下文已保存 — 可以重试。'],
+  'Синтаксическая ошибка в <script>:': ['Syntax error in <script>:', '＜script＞ 中的语法错误：'],
+  'Ошибка парсинга HTML:': ['HTML parsing error:', 'HTML 解析错误：'],
+  'Синтаксическая ошибка JS:': ['JS syntax error:', 'JS 语法错误：'],
+  'Ошибка:': ['Error:', '错误：'],
+  'Лимит запросов': ['Rate limit', '请求限制'],
+  'Сбой сервера': ['Server error', '服务器错误'],
+  'повтор через': ['retry in', '重试于'],
+  'с': ['s', '秒'],
+  'попытка': ['attempt', '次尝试'],
+  'Ошибка сети': ['Network error', '网络错误'],
+  'Ошибка чтения директории': ['Directory read error', '读取目录错误'],
+  'Авто-снапшот перед сборкой': ['Auto-snapshot before build', '构建前自动快照'],
+  'Автоматический снапшот перед выполнением плана.': ['Automatic snapshot before plan execution.', '计划执行前自动快照。'],
+  'Ошибка загрузки редактора': ['Editor load error', '编辑器加载错误'],
+  'Кликните на любой элемент в превью, чтобы выбрать его': ['Click any element in the preview to select it', '点击预览中的任意元素以选择它'],
+  'Произошла ошибка сборки при запуске команды. Исправь файлы кода, чтобы сборка проходила успешно.': ['A build error occurred while running the command. Fix the code files so the build succeeds.', '运行命令时发生构建错误。请修复代码文件以使构建成功。'],
+  'Автоматический чекпоинт перед действием агента (можно откатиться).': ['Automatic checkpoint before agent action (can be rolled back).', '智能体操作前自动检查点（可回滚）。'],
+  'Папка проекта не выбрана. Снапшоты недоступны.': ['Project folder not selected. Snapshots are unavailable.', '未选择项目文件夹。快照不可用。'],
 };
 
 let currentLang: Lang = 'ru';
