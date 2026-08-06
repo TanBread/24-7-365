@@ -43,7 +43,9 @@ declare global {
       prepareShadowWorkspace: (workspacePath: string) => Promise<boolean>;
       mergeShadowWorkspace: (workspacePath: string) => Promise<boolean>;
       discardShadowWorkspace: (workspacePath: string) => Promise<boolean>;
-      showConfirm: (message: string, title?: string) => Promise<boolean>;
+      showConfirm: (message: string, title?: string, lang?: string) => Promise<boolean>;
+      setSandboxEnabled: (enabled: boolean) => Promise<boolean>;
+      setLanguage: (lang: string) => Promise<boolean>;
       setMinimizeToTray: (enabled: boolean) => Promise<boolean>;
       showNotification: (title: string, body: string) => Promise<boolean>;
       openExternalPreview: (html: string) => Promise<boolean>;
@@ -616,6 +618,14 @@ function saveSettings() {
   if (window.electronAPI?.secureKeySet) {
     window.electronAPI.secureKeySet(apiKey || '').catch(() => {});
   }
+  // Sync sandbox preference to the main process (server-side enforcement).
+  if (window.electronAPI?.setSandboxEnabled) {
+    window.electronAPI.setSandboxEnabled(settings.sandboxEnabled).catch(() => {});
+  }
+  // Sync language to the main process.
+  if (window.electronAPI?.setLanguage) {
+    window.electronAPI.setLanguage(settings.language || 'ru').catch(() => {});
+  }
 }
 
 // Load the API key from secure storage, migrating any legacy plaintext key.
@@ -842,7 +852,7 @@ function populateModelSelect(models: ModelInfo[], selectedId?: string) {
   // Add provider header at the top
   const providerHeader = document.createElement('option');
   providerHeader.disabled = true;
-  providerHeader.textContent = `=== Провайдер: ${settings.llmProvider === 'openrouter' ? 'OpenRouter' : 'Ollama'} ===`;
+  providerHeader.textContent = `=== ${t('Провайдер:')} ${settings.llmProvider === 'openrouter' ? 'OpenRouter' : 'Ollama'} ===`;
   modelSelect.appendChild(providerHeader);
 
   // Group by provider
@@ -1134,8 +1144,8 @@ function renderSidebarProjects() {
         ${folderLabel ? `<div class="sidebar-project-folder"><i data-lucide="folder"></i><span>${esc(folderLabel)}</span></div>` : ''}
       </div>
       <div class="sidebar-project-actions">
-        <button class="sidebar-action-btn-mini rename-project" title="Переименовать"><i data-lucide="pencil"></i></button>
-        <button class="sidebar-action-btn-mini delete-project delete" title="Удалить"><i data-lucide="trash-2"></i></button>
+        <button class="sidebar-action-btn-mini rename-project" title="${t('Переименовать')}"><i data-lucide="pencil"></i></button>
+        <button class="sidebar-action-btn-mini delete-project delete" title="${t('Удалить')}"><i data-lucide="trash-2"></i></button>
       </div>
     `;
     
@@ -1380,9 +1390,15 @@ function parseMarkdown(text: string): string {
   // event handlers, javascript: URLs, etc.) before it touches innerHTML.
   parsedHtml = sanitizeHtml(parsedHtml);
 
-  // Restore tool tag placeholders
+  // Restore tool tag placeholders — escape HTML entities so the restored
+  // content is rendered as literal text, not parsed as executable HTML.
   for (let i = 0; i < toolPlaceholders.length; i++) {
-    parsedHtml = parsedHtml.replace(`%%TOOLPLACEHOLDER${i}%%`, toolPlaceholders[i]);
+    const safe = toolPlaceholders[i]
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    parsedHtml = parsedHtml.replace(`%%TOOLPLACEHOLDER${i}%%`, safe);
   }
 
   return thinkHtml + parsedHtml;
@@ -1479,8 +1495,8 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
     const hasResult = isHistory && toolResults[idx] !== undefined;
     const resultText = hasResult ? toolResults[idx] : t('Ожидание запуска...');
     
-    const isFailed = hasResult && (resultText.startsWith('Ошибка') || resultText.includes('ОШИБКА') || resultText.includes('отклонено'));
-    const codeMatch = resultText.match(/Код завершения:\s*(\d+)/);
+    const isFailed = hasResult && (resultText.startsWith(t('Ошибка')) || resultText.includes(t('ОШИБКА')) || resultText.includes(t('отклонено')));
+    const codeMatch = resultText.match(new RegExp(t('Код завершения') + ':\\s*(\\d+)'));
     const isCommandError = codeMatch && codeMatch[1] !== '0';
     const failedStatus = isFailed || isCommandError;
 
@@ -2018,10 +2034,10 @@ function removeThinking() {
 // Format file size in human-readable form
 function formatBytes(bytes: number): string {
   if (!bytes && bytes !== 0) return '';
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} ГБ`;
+  if (bytes < 1024) return `${bytes} ${t('Б')}`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} ${t('КБ')}`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} ${t('МБ')}`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} ${t('ГБ')}`;
 }
 
 // ═══════════════════════════════════════════
@@ -2062,8 +2078,8 @@ async function refreshWorkspaceFilesUI() {
         <i data-lucide="${icon}"></i>
         <span class="file-item-name" title="${esc(f.path)}">${esc(f.path)}</span>
         ${sizeStr ? `<span class="file-item-size">${esc(sizeStr)}</span>` : ''}
-        ${!f.isDir ? `<button class="file-item-attach-btn" title="Прикрепить к контексту"><i data-lucide="${attachedFiles.has(f.path) ? 'check' : 'plus'}"></i></button>` : ''}
-        ${!f.isDir ? `<button class="file-item-pin-btn" title="${(activeProject?.pinnedFiles || []).includes(f.path) ? 'Открепить' : 'Закрепить в контексте'}"><i data-lucide="${(activeProject?.pinnedFiles || []).includes(f.path) ? 'pin-off' : 'pin'}"></i></button>` : ''}
+        ${!f.isDir ? `<button class="file-item-attach-btn" title="${t('Прикрепить к контексту')}"><i data-lucide="${attachedFiles.has(f.path) ? 'check' : 'plus'}"></i></button>` : ''}
+        ${!f.isDir ? `<button class="file-item-pin-btn" title="${(activeProject?.pinnedFiles || []).includes(f.path) ? t('Открепить') : t('Закрепить в контексте')}"><i data-lucide="${(activeProject?.pinnedFiles || []).includes(f.path) ? 'pin-off' : 'pin'}"></i></button>` : ''}
       `;
 
       if (attachedFiles.has(f.path)) {
@@ -2449,7 +2465,7 @@ function showPlanSuggestion() {
     div.remove();
     skipPlanSuggestion = true;
     setGeneratingState(true);
-    autoCheckpoint(`Перед запуском ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`).then(() => {
+    autoCheckpoint(`${t('Перед запуском')} ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`).then(() => {
       agentStepCount = 0;
       runAgentStep();
     });
@@ -2464,7 +2480,7 @@ function showPlanSuggestion() {
     if (tabPlan) tabPlan.classList.add('active');
     chatInput.placeholder = t('Опишите, что хотите спроектировать и спланировать...');
     setGeneratingState(true);
-    autoCheckpoint(`Перед запуском ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`).then(() => {
+    autoCheckpoint(`${t('Перед запуском')} ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`).then(() => {
       agentStepCount = 0;
       runAgentStep();
     });
@@ -2483,8 +2499,8 @@ function renderPlanStepElement(planId: string, idx: number, listContainer: HTMLE
       <span class="plan-step-text" id="step-text-${planId}-${idx}">${esc(step.text)}</span>
     </label>
     <div class="plan-step-actions" id="step-actions-${planId}-${idx}">
-      <button class="btn-edit-step" id="btn-edit-${planId}-${idx}" title="Редактировать"><i data-lucide="pencil"></i></button>
-      <button class="btn-delete-step" id="btn-delete-${planId}-${idx}" title="Удалить"><i data-lucide="trash-2"></i></button>
+      <button class="btn-edit-step" id="btn-edit-${planId}-${idx}" title="${t('Редактировать')}"><i data-lucide="pencil"></i></button>
+      <button class="btn-delete-step" id="btn-delete-${planId}-${idx}" title="${t('Удалить')}"><i data-lucide="trash-2"></i></button>
     </div>
   `;
   listContainer.appendChild(stepItem);
@@ -2926,29 +2942,29 @@ function translateErrorMessage(msg: string): string {
   const m = msg.toLowerCase();
   if (m.includes('npm err!') || m.includes('npm error')) {
     if (m.includes('enoent') || m.includes('package.json')) {
-      return 'Ошибка NPM: Не найден файл package.json в рабочей папке проекта. Пожалуйста, убедитесь, что проект инициализирован.';
+      return t('Ошибка NPM: Не найден файл package.json в рабочей папке проекта. Пожалуйста, убедитесь, что проект инициализирован.');
     }
     if (m.includes('missing') || m.includes('not found') || m.includes('cannot find module')) {
-      return 'Ошибка NPM: Отсутствует необходимый пакет или модуль. Возможно, требуется запустить "npm install".';
+      return t('Ошибка NPM: Отсутствует необходимый пакет или модуль. Возможно, требуется запустить "npm install".');
     }
-    return 'Ошибка NPM при сборке или установке пакетов. Возможно, версия Node.js/NPM несовместима с зависимостями.';
+    return t('Ошибка NPM при сборке или установке пакетов. Возможно, версия Node.js/NPM несовместима с зависимостями.');
   }
   if (m.includes('cannot find module') || m.includes('module not found')) {
-    return 'Ошибка импорта: Файл или модуль не найден в путях сборки. Проверьте правильность путей в импортах.';
+    return t('Ошибка импорта: Файл или модуль не найден в путях сборки. Проверьте правильность путей в импортах.');
   }
   if (m.includes('typescript') || m.includes('ts2307') || m.includes('ts2304')) {
-    return 'Ошибка компиляции TypeScript: Обнаружены синтаксические нестыковки или отсутствующие типы данных.';
+    return t('Ошибка компиляции TypeScript: Обнаружены синтаксические нестыковки или отсутствующие типы данных.');
   }
   if (m.includes('eslint') || m.includes('biome') || m.includes('lint')) {
-    return 'Ошибка линтинга: Код не прошел проверку качества (форматирование или потенциальные баги).';
+    return t('Ошибка линтинга: Код не прошел проверку качества (форматирование или потенциальные баги).');
   }
   if (m.includes('permission denied') || m.includes('eacces') || m.includes('eperm')) {
-    return 'Ошибка прав доступа: Недостаточно прав для выполнения команды или записи файлов в этой директории.';
+    return t('Ошибка прав доступа: Недостаточно прав для выполнения команды или записи файлов в этой директории.');
   }
   if (m.includes('timeout') || m.includes('timed out')) {
-    return 'Превышено время ожидания: Команда выполнялась слишком долго и была принудительно остановлена.';
+    return t('Превышено время ожидания: Команда выполнялась слишком долго и была принудительно остановлена.');
   }
-  return 'Неизвестная системная ошибка или сбой компиляции при сборке.';
+  return t('Неизвестная системная ошибка или сбой компиляции при сборке.');
 }
 
 function showSelfHealingErrorCard(planId: string, command: string, errorMessage: string): Promise<'heal' | 'rebuild'> {
@@ -2969,7 +2985,7 @@ function showSelfHealingErrorCard(planId: string, command: string, errorMessage:
     const div = document.createElement('div');
     div.className = 'chat-message ai';
     div.innerHTML = `
-      <div class="message-meta"><span class="sender-name">Обработка ошибки</span></div>
+      <div class="message-meta"><span class="sender-name">${t('Обработка ошибки')}</span></div>
       <div class="message-text">
         <div class="plan-error-card">
           <div class="plan-error-title">
@@ -2980,7 +2996,7 @@ function showSelfHealingErrorCard(planId: string, command: string, errorMessage:
             ${friendlyDesc}
           </div>
           <div class="plan-error-desc" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-            Команда: <code>${esc(command)}</code>
+            ${t('Команда')}: <code>${esc(command)}</code>
           </div>
           <div class="plan-error-message" style="margin-top: 8px; font-family: monospace; background: var(--bg-panel-alt); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-default); max-height: 150px; overflow-y: auto; font-size: 11px;">
             ${esc(errorMessage)}
@@ -3174,7 +3190,7 @@ function updateContextBar() {
   const msgCount = activeProject ? activeProject.chatHistory.filter((m: any) => m.role === 'assistant').length : 0;
   const tokPerMsg = msgCount > 0 ? Math.round(total / msgCount) : 0;
   labelEl.textContent = `${(lastUsed / 1000).toFixed(1)}K (${t('запрос')}) · ${(total / 1000).toFixed(0)}K (${t('всего')}) · ~${tokPerMsg.toLocaleString()} tok/msg / ${(maxCtx / 1000).toFixed(0)}K`;
-  labelEl.title = `${t('Последний запрос')}: ${lastRequestTokens.prompt.toLocaleString()} prompt + ${lastRequestTokens.completion.toLocaleString()} completion\n${t('Всего за сессию')}: ${tokenAccumulated.prompt.toLocaleString()} + ${tokenAccumulated.completion.toLocaleString()}\nСообщений: ${msgCount} · ~${tokPerMsg.toLocaleString()} tok/msg`;
+  labelEl.title = `${t('Последний запрос')}: ${lastRequestTokens.prompt.toLocaleString()} prompt + ${lastRequestTokens.completion.toLocaleString()} completion\n${t('Всего за сессию')}: ${tokenAccumulated.prompt.toLocaleString()} + ${tokenAccumulated.completion.toLocaleString()}\n${t('Сообщений')}: ${msgCount} · ~${tokPerMsg.toLocaleString()} tok/msg`;
 }
 
 // Rough token estimate: ~4 chars per token for mixed RU/EN.
@@ -3209,7 +3225,7 @@ function fitToContext(messages: ChatMessage[], maxCtx: number, reserveForReply: 
   // If still over budget — truncate remaining old messages aggressively
   for (let i = 1; i < out.length - KEEP_TAIL && totalTokens(out) > budget; i++) {
     if (out[i].content && out[i].content.length > 600) {
-      out[i] = { ...out[i], content: out[i].content.slice(0, 600) + '\n…[усечено для лимита контекста]' };
+      out[i] = { ...out[i], content: out[i].content.slice(0, 600) + '\n…[' + t('усечено для лимита контекста') + ']' };
     }
   }
   return out;
@@ -3709,7 +3725,7 @@ contextPayload += '=====================================\n\n';
   skipPlanSuggestion = false;
 
   // Silent auto-checkpoint before the agent modifies anything
-  await autoCheckpoint(`Перед запросом ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`);
+  await autoCheckpoint(`${t('Перед запросом')} ${new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })}`);
 
   agentStepCount = 0;
   runAgentStep();
@@ -3956,7 +3972,7 @@ async function runAgentStep() {
       Не пиши исходный код и не вызывай инструменты записи/изменения файлов (<write_file> и <edit_file>). Только подготовить план. Отвечай кратко на русском языке.`;
     } else if (isExecutingPlan && currentStepIndex !== -1) {
       dynamicSystemPrompt += `\n\nВНИМАНИЕ: Мы находимся в режиме сборки проекта по плану.
-      Сейчас выполняется ШАГ ${currentStepIndex + 1}: "${planSteps[currentStepIndex].text}".
+      ${t('Сейчас выполняется ШАГ')} ${currentStepIndex + 1}: "${planSteps[currentStepIndex].text}".
       Твоя задача — реализовать именно этот шаг. Когда шаг будет полностью выполнен, выведи в конце фразу "Шаг выполнен." для продвижения FSM автомата.`;
     }
 
@@ -3975,7 +3991,7 @@ async function runAgentStep() {
     try {
       result = await streamChatCompletionWithFallback(messages);
     } catch (innerError: any) {
-      if (innerError?.message === 'Генерация прервана.') {
+      if (innerError?.message === t('Генерация прервана.')) {
         setGeneratingState(false);
         return;
       }
@@ -4065,14 +4081,14 @@ async function executeToolsSequentially(tools: AgentTool[]) {
     const tool = tools[i];
     const accordion = lastAiBubble?.querySelector(`.tool-step-${i}`);
     
-    let opLabel = tool.type === 'read_dir' ? `📁 Чтение: ${tool.params.path}` :
-                    tool.type === 'read_file' ? `📄 Исследование: ${tool.params.path}` :
-                    tool.type === 'write_file' ? `✏️ Создание: ${tool.params.path}` :
-                    tool.type === 'edit_file' ? `✏️ Правка: ${tool.params.path}` :
-                    tool.type === 'execute_command' ? `⚡ Выполнение: ${tool.params.command.substring(0, 40)}` :
-                    tool.type === 'list_components' ? `🔍 Поиск компонентов...` :
-                    tool.type === 'search_code' ? `🔎 Поиск в коде: ${tool.params.query}` :
-                    tool.type === 'check_image_size' ? `🖼️ Анализ: ${tool.params.path}` : '⚙️ Выполнение...';
+    let opLabel = tool.type === 'read_dir' ? `📁 ${t('Чтение:')} ${tool.params.path}` :
+                    tool.type === 'read_file' ? `📄 ${t('Исследование:')} ${tool.params.path}` :
+                    tool.type === 'write_file' ? `✏️ ${t('Создание:')} ${tool.params.path}` :
+                    tool.type === 'edit_file' ? `✏️ ${t('Правка:')} ${tool.params.path}` :
+                    tool.type === 'execute_command' ? `⚡ ${t('Выполнение:')} ${tool.params.command.substring(0, 40)}` :
+                    tool.type === 'list_components' ? `🔍 ${t('Поиск компонентов...')}` :
+                    tool.type === 'search_code' ? `🔎 ${t('Поиск в коде:')} ${tool.params.query}` :
+                    tool.type === 'check_image_size' ? `🖼️ ${t('Анализ:')} ${tool.params.path}` : `⚙️ ${t('Выполнение...')}`;
 
     if (tool.type.startsWith('mcp__')) {
       const parts = tool.type.split('__');
@@ -4096,11 +4112,11 @@ async function executeToolsSequentially(tools: AgentTool[]) {
     let success = true;
     try {
       res = await handleToolExecution(tool);
-      results.push(`Результат выполнения ${tool.rawTag}:\n${res}`);
+      results.push(`${t('Результат выполнения')} ${tool.rawTag}:\n${res}`);
     } catch (err: any) {
       success = false;
       res = err.message;
-      results.push(`Ошибка при выполнении ${tool.rawTag}:\n${err.message}`);
+      results.push(`${t('Ошибка при выполнении')} ${tool.rawTag}:\n${err.message}`);
     }
 
     if (!isGenerating) {
@@ -4111,8 +4127,8 @@ async function executeToolsSequentially(tools: AgentTool[]) {
       const statusEl = accordion.querySelector('.tool-accordion-status');
       const contentEl = accordion.querySelector('.tool-accordion-content');
       
-      const isFailed = !success || res.startsWith('Ошибка') || res.includes('ОШИБКА') || res.includes('отклонено');
-      const codeMatch = res.match(/Код завершения:\s*(\d+)/);
+      const isFailed = !success || res.startsWith(t('Ошибка')) || res.includes(t('ОШИБКА')) || res.includes(t('отклонено'));
+      const codeMatch = res.match(new RegExp(t('Код завершения') + ':\\s*(\\d+)'));
       const isCommandError = codeMatch && codeMatch[1] !== '0';
       const failedStatus = isFailed || isCommandError;
 
@@ -4375,7 +4391,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
       // Always remove bubble on error (including retry failures)
       bubble.remove();
       if (error.name === 'AbortError') {
-        throw new Error('Генерация прервана.');
+        throw new Error(t('Генерация прервана.'));
       }
       throw error;
     } finally {
@@ -4537,7 +4553,7 @@ function appendTerminal(stream: string, chunk: string) {
 function clearTerminal() {
   if (term) {
     term.clear();
-    term.write('\x1b[3mЗдесь появляется живой вывод команд, которые запускает агент.\x1b[0m\r\n');
+    term.write(`\x1b[3m${t('Здесь появляется живой вывод команд, которые запускает агент.')}\x1b[0m\r\n`);
   }
   terminalHasContent = false;
 }
@@ -4553,11 +4569,11 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
   // Block file modifications and commands if plan is not approved yet
   if ((tool.type === 'write_file' || tool.type === 'edit_file' || tool.type === 'execute_command') && appMode === 'plan' && !planApproved) {
-    return 'Ошибка: Запись файлов, редактирование и выполнение команд заблокированы. Вы находитесь в режиме планирования (Plan), и план разработки ещё не был утвержден пользователем (нажмите кнопку 🚀 Начать сборку). Попроси пользователя сначала утвердить план.';
+    return t('Ошибка: Запись файлов, редактирование и выполнение команд заблокированы. Вы находитесь в режиме планирования (Plan), и план разработки ещё не был утвержден пользователем (нажмите кнопку 🚀 Начать сборку). Попроси пользователя сначала утвердить план.');
   }
 
   if (!workspacePath) {
-    return 'ОШИБКА: Рабочая папка не выбрана. Скажите пользователю: «Пожалуйста, нажмите кнопку «Открыть» внизу боковой панели слева и выберите папку для работы.»';
+    return t('ОШИБКА: Рабочая папка не выбрана. Скажите пользователю: «Пожалуйста, нажмите кнопку «Открыть» внизу боковой панели слева и выберите папку для работы.»');
   }
 
   // Prepend .shadow-workspace/ to path if plan execution is active (disabled here to avoid double-prepend in API)
@@ -4575,7 +4591,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
   if (tool.type === 'read_dir') {
     if (settings.permRead === 'ask') {
       const allowed = await requestPermission('read', `Просмотр содержимого папки: "${tool.params.path}"`);
-      if (!allowed) return 'Действие отклонено пользователем.';
+      if (!allowed) return t('Действие отклонено пользователем.');
     }
     const files = await window.electronAPI.readDir(activeWorkspace);
     const subpath = tool.params.path === '.' || tool.params.path === '/' ? '' : tool.params.path;
@@ -4590,17 +4606,17 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
   if (tool.type === 'read_file') {
     if (!checkScope(tool.params.path)) {
-      return `Ошибка: Файл "${tool.params.path}" находится за пределами области работы "${scopePath}".`;
+      return `${t('Ошибка')}: ${t('Файл')} "${tool.params.path}" ${t('находится за пределами области работы')} "${scopePath}".`;
     }
     // Block reading binary/image files — the model is text-only
     const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.ico', '.svg', '.avif'];
     const ext = tool.params.path.toLowerCase().split('.').pop();
     if (ext && imageExts.includes('.' + ext)) {
-      return `ОШИБКА: Невозможно прочитать "${tool.params.path}" — модель не поддерживает изображения. Используй <check_image_size> для проверки размеров. Не пытайся читать изображения через <read_file>.`;
+      return `${t('ОШИБКА')}: ${t('Невозможно прочитать')} "${tool.params.path}" — ${t('модель не поддерживает изображения. Используй <check_image_size> для проверки размеров. Не пытайся читать изображения через <read_file>.')}`;
     }
     if (settings.permRead === 'ask') {
       const allowed = await requestPermission('read', `Чтение содержимого файла: "${tool.params.path}"`);
-      if (!allowed) return 'Действие отклонено пользователем.';
+      if (!allowed) return t('Действие отклонено пользователем.');
     }
     const content = await window.electronAPI.readFile(mapPath(tool.params.path), activeWorkspace, settings.sandboxEnabled);
     if (tool.params.full) {
@@ -4611,16 +4627,16 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
   if (tool.type === 'write_file') {
     if (!checkScope(tool.params.path)) {
-      return `Ошибка: Путь "${tool.params.path}" находится за пределами области работы "${scopePath}".`;
+      return `${t('Ошибка')}: ${t('Путь')} "${tool.params.path}" ${t('находится за пределами области работы')} "${scopePath}".`;
     }
     if (settings.permWrite === 'deny') {
-      return 'ОШИБКА: Запись файлов запрещена настройками. Скажите пользователю: «В настройках (кнопка ⚙️ внизу) → раздел «Разрешения», измените «Запись файлов» на «Спрашивать с Ревью» или «Всегда записывать».»';
+      return t('ОШИБКА: Запись файлов запрещена настройками. Скажите пользователю: «В настройках (кнопка ⚙️ внизу) → раздел «Разрешения», измените «Запись файлов» на «Спрашивать с Ревью» или «Всегда записывать».»');
     }
 
     // Shadow Linting: check syntax
     const validation = validateCodeSyntax(tool.params.path, tool.params.content);
     if (!validation.valid) {
-      return `ОШИБКА СИНТАКСИСА: Запись файла отклонена из-за некорректного синтаксиса: ${validation.error}. Пожалуйста, исправь ошибки в коде.`;
+      return `${t('ОШИБКА СИНТАКСИСА')}: ${t('Запись файла отклонена из-за некорректного синтаксиса')}: ${validation.error}. ${t('Пожалуйста, исправь ошибки в коде.')}`;
     }
 
     if (settings.permWrite === 'review') {
@@ -4629,31 +4645,31 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
         oldContent = await window.electronAPI.readFile(mapPath(tool.params.path), activeWorkspace, settings.sandboxEnabled);
       } catch (e) {}
       const allowed = await requestWritePermissionWithDiff(tool.params.path, oldContent, tool.params.content);
-      if (!allowed) return 'Действие отклонено пользователем в режиме Авто-Ревью.';
+      if (!allowed) return t('Действие отклонено пользователем в режиме Авто-Ревью.');
     } else if (settings.permWrite === 'ask') {
       const allowed = await requestPermission('write', `Запись файла: "${tool.params.path}"`);
-      if (!allowed) return 'Действие отклонено пользователем.';
+      if (!allowed) return t('Действие отклонено пользователем.');
     }
 
     await window.electronAPI.writeFile(mapPath(tool.params.path), tool.params.content, activeWorkspace, settings.sandboxEnabled);
     buildSessionWroteFiles = true;
     noteFileTouched(tool.params.path);
-    return 'Успешно записано на диск.';
+    return t('Успешно записано на диск.');
   }
 
   if (tool.type === 'edit_file') {
     if (!checkScope(tool.params.path)) {
-      return `Ошибка: Путь "${tool.params.path}" находится за пределами области работы "${scopePath}".`;
+      return `${t('Ошибка')}: ${t('Путь')} "${tool.params.path}" ${t('находится за пределами области работы')} "${scopePath}".`;
     }
     if (settings.permWrite === 'deny') {
-      return 'ОШИБКА: Запись файлов запрещена настройками. Скажите пользователю: «В настройках (кнопка ⚙️ внизу) → раздел «Разрешения», измените «Запись файлов» на «Спрашивать с Ревью» или «Всегда записывать».»';
+      return t('ОШИБКА: Запись файлов запрещена настройками. Скажите пользователю: «В настройках (кнопка ⚙️ внизу) → раздел «Разрешения», измените «Запись файлов» на «Спрашивать с Ревью» или «Всегда записывать».»');
     }
 
     let oldContent = '';
     try {
       oldContent = await window.electronAPI.readFile(mapPath(tool.params.path), activeWorkspace, settings.sandboxEnabled);
     } catch (e: any) {
-      return `Ошибка: Не удалось прочитать оригинальный файл для редактирования: ${e.message}`;
+      return `${t('Ошибка')}: ${t('Не удалось прочитать оригинальный файл для редактирования')}: ${e.message}`;
     }
 
     const searchContent = tool.params.search as string;
@@ -4661,7 +4677,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
     // Strict block: Do not allow replacing more than 80% of a large file via edit_file
     if (oldContent.length > 500 && searchContent.length > oldContent.length * 0.8) {
-      return 'ОШИБКА ПАТЧА: Запрещено переписывать весь файл целиком! Твой патч слишком большой. Используй <edit_file> только для замены конкретных функций или блоков (до 50-100 строк за раз). Это необходимо для экономии токенов.';
+      return t('ОШИБКА ПАТЧА: Запрещено переписывать весь файл целиком! Твой патч слишком большой. Используй <edit_file> только для замены конкретных функций или блоков (до 50-100 строк за раз). Это необходимо для экономии токенов.');
     }
 
     let matchIndex = oldContent.indexOf(searchContent);
@@ -4725,12 +4741,12 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     if (matchIndex !== -1 && searchContent.length > 0) {
       const exactCount = oldContent.split(searchContent).length - 1;
       if (exactCount > 1) {
-        return `ОШИБКА ПАТЧА: Блок <search> встречается в файле ${tool.params.path} ${exactCount} раз — невозможно однозначно определить место замены. Добавь в <search> больше окружающего контекста (соседние строки), чтобы фрагмент стал уникальным.`;
+        return `${t('ОШИБКА ПАТЧА')}: ${t('Блок <search> встречается в файле')} ${tool.params.path} ${exactCount} ${t('раз — невозможно однозначно определить место замены. Добавь в <search> больше окружающего контекста (соседние строки), чтобы фрагмент стал уникальным.')}`;
       }
     }
 
     if (matchIndex === -1) {
-      return `ОШИБКА ПАТЧА: Не удалось найти блок <search> в файле ${tool.params.path}. Ожидаемый код не найден. Перечитай файл с помощью <read_file> и сформируй новый <edit_file> с точным фрагментом, соблюдая отступы.`;
+      return `${t('ОШИБКА ПАТЧА')}: ${t('Не удалось найти блок <search> в файле')} ${tool.params.path}. ${t('Ожидаемый код не найден. Перечитай файл с помощью <read_file> и сформируй новый <edit_file> с точным фрагментом, соблюдая отступы.')}`;
     }
 
     const newContent = oldContent.substring(0, matchIndex) + replaceContent + oldContent.substring(matchIndex + matchLength);
@@ -4738,21 +4754,21 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     // Shadow Linting: check syntax
     const validation = validateCodeSyntax(tool.params.path, newContent);
     if (!validation.valid) {
-      return `ОШИБКА СИНТАКСИСА: Изменение файла отклонено из-за некорректного синтаксиса: ${validation.error}. Пожалуйста, исправь ошибки в коде.`;
+      return `${t('ОШИБКА СИНТАКСИСА')}: ${t('Изменение файла отклонено из-за некорректного синтаксиса')}: ${validation.error}. ${t('Пожалуйста, исправь ошибки в коде.')}`;
     }
 
     if (settings.permWrite === 'review') {
       const allowed = await requestWritePermissionWithDiff(tool.params.path, oldContent, newContent);
-      if (!allowed) return 'Действие отклонено пользователем в режиме Авто-Ревью.';
+      if (!allowed) return t('Действие отклонено пользователем в режиме Авто-Ревью.');
     } else if (settings.permWrite === 'ask') {
       const allowed = await requestPermission('write', `Редактирование файла: "${tool.params.path}"`);
-      if (!allowed) return 'Действие отклонено пользователем.';
+      if (!allowed) return t('Действие отклонено пользователем.');
     }
 
     await window.electronAPI.writeFile(mapPath(tool.params.path), newContent, activeWorkspace, settings.sandboxEnabled);
     buildSessionWroteFiles = true;
     noteFileTouched(tool.params.path);
-    return 'Изменения успешно применены к файлу.';
+    return t('Изменения успешно применены к файлу.');
   }
 
   if (tool.type === 'execute_command') {
@@ -4760,15 +4776,15 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     const isTryingToWriteFile = cmdLower.includes('set-content') || cmdLower.includes('out-file') || cmdLower.includes('echo') || cmdLower.includes('>') || cmdLower.startsWith('write ') || cmdLower.includes('curl ') || cmdLower.includes('wget ');
     
     if (isTryingToWriteFile) {
-      return 'ОШИБКА КРИТИЧЕСКОГО УРОВНЯ: Использование execute_command для записи/создания/изменения файлов или скачивания кода СТРОГО ЗАПРЕЩЕНО! Вы ОБЯЗАНЫ использовать инструменты <write_file> (для новых) или <edit_file> (для существующих). Не пытайтесь обойти это правило.';
+      return t('ОШИБКА КРИТИЧЕСКОГО УРОВНЯ: Использование execute_command для записи/создания/изменения файлов или скачивания кода СТРОГО ЗАПРЕЩЕНО! Вы ОБЯЗАНЫ использовать инструменты <write_file> (для новых) или <edit_file> (для существующих). Не пытайтесь обойти это правило.');
     }
     if (settings.permExec === 'deny') {
-      return 'ОШИБКА: Выполнение команд терминала запрещено настройками. Скажите пользователю: «В настройках (кнопка ⚙️ внизу) → раздел «Разрешения», измените «Запуск терминальных команд» на «Спрашивать перед запуском».»';
+      return t('ОШИБКА: Выполнение команд терминала запрещено настройками. Скажите пользователю: «В настройках (кнопка ⚙️ внизу) → раздел «Разрешения», измените «Запуск терминальных команд» на «Спрашивать перед запуском».»');
     }
 
     if (settings.permExec === 'ask') {
       const allowed = await requestPermission('exec', `Запуск консольной команды: "${tool.params.command}"`);
-      if (!allowed) return 'Выполнение команды отклонено пользователем.';
+      if (!allowed) return t('Выполнение команды отклонено пользователем.');
     }
 
     // Render an inline shell-exec card that streams the live output and
@@ -4829,12 +4845,12 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       stdinInput.focus();
     }
 
-    setTerminalStatus('● выполняется');
+    setTerminalStatus(`● ${t('выполняется')}`);
     const killBtn = document.getElementById('btn-kill-terminal');
     if (killBtn) killBtn.classList.remove('hidden');
 
     const res = await window.electronAPI.executeCommandStream(tool.params.command, activeWorkspace, execId);
-    setTerminalStatus(res.code === 0 ? '✓ завершено' : `✗ код ${res.code}`);
+    setTerminalStatus(res.code === 0 ? `✓ ${t('завершено')}` : `✗ ${t('код')} ${res.code}`);
 
     // Detach the live stream listener to avoid leaks.
     if (typeof unsubscribe === 'function') {
@@ -4860,18 +4876,18 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     // Pause build and show error recovery prompt if command failed during plan execution
     if (res.code !== 0 && isExecutingPlan) {
       const planId = (document.querySelector('.plan-widget') as HTMLElement)?.id?.replace('plan-widget-', '') || '';
-      const choice = await showSelfHealingErrorCard(planId, tool.params.command, res.stderr || res.stdout || 'Неизвестная ошибка выполнения команды');
+      const choice = await showSelfHealingErrorCard(planId, tool.params.command, res.stderr || res.stdout || t('Неизвестная ошибка выполнения команды'));
       if (choice === 'rebuild') {
         // Plan is being rebuilt — abort this step's tool result so the agent
         // doesn't try to "continue" on a stale plan.
-        return `Команда не выполнена (код ${res.code}). Пользователь запросил пересборку плана. Остановись и дождись новых инструкций.`;
+        return `${t('Команда не выполнена')} (код ${res.code}). ${t('Пользователь запросил пересборку плана. Остановись и дождись новых инструкций.')}`;
       }
       // 'heal' — let the result fall through, but tag it so the agent's
       // next turn understands that a retry was explicitly requested.
-      return `Код завершения: ${res.code}\nStdout:\n${res.stdout}\nStderr:\n${res.stderr}\n\n[Пользователь нажал «Исправить автоматически» — исправь файлы кода и повтори команду.]`;
+      return `${t('Код завершения')}: ${res.code}\nStdout:\n${res.stdout}\nStderr:\n${res.stderr}\n\n[${t('Пользователь нажал «Исправить автоматически» — исправь файлы кода и повтори команду.')} ]`;
     }
 
-    return `Код завершения: ${res.code}\nStdout:\n${res.stdout}\nStderr:\n${res.stderr}`;
+    return `${t('Код завершения')}: ${res.code}\nStdout:\n${res.stdout}\nStderr:\n${res.stderr}`;
   }
 
   if (tool.type === 'list_components') {
@@ -4883,25 +4899,25 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       }
       return JSON.stringify(list, null, 2);
     } catch (e: any) {
-      return `Ошибка при получении списка компонентов: ${e.message}`;
+      return `${t('Ошибка при получении списка компонентов')}: ${e.message}`;
     }
   }
 
   if (tool.type === 'check_image_size') {
     if (!checkScope(tool.params.path)) {
-      return `Ошибка: Путь "${tool.params.path}" находится за пределами области работы "${scopePath}".`;
+      return `${t('Ошибка')}: ${t('Путь')} "${tool.params.path}" ${t('находится за пределами области работы')} "${scopePath}".`;
     }
     try {
       const info = await window.electronAPI.checkImageSize(mapPath(tool.params.path), activeWorkspace);
       return JSON.stringify(info, null, 2);
     } catch (e: any) {
-      return `Ошибка при проверке размера изображения: ${e.message}`;
+      return `${t('Ошибка при проверке размера изображения')}: ${e.message}`;
     }
   }
 
   if (tool.type === 'search_code') {
     const query = String(tool.params.query || '').trim();
-    if (!query) return 'Ошибка: пустой поисковый запрос.';
+    if (!query) return t('Ошибка: пустой поисковый запрос.');
 
     // Try the native Rust BM25 engine first. If it's been indexed, results
     // come back instantly with proper relevance ranking.
@@ -4922,7 +4938,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
               const snippet = h.chunk_content.split('\n').slice(0, 3).join('\n').slice(0, 320);
               return `${h.file_path}:${h.line_start}-${h.line_end} (score=${h.score.toFixed(2)}):\n${snippet}`;
             }).join('\n---\n');
-            return `[native BM25] Найдено: ${hits.length}\n${out}`;
+            return `[native BM25] ${t('Найдено')}: ${hits.length}\n${out}`;
           }
         }
       }
@@ -4967,12 +4983,12 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       matches.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
       const top = matches.slice(0, 20);
       if (top.length === 0) {
-        return `По запросу "${query}" совпадений не найдено в файлах проекта.`;
+        return `${t('По запросу')} "${query}" ${t('совпадений не найдено в файлах проекта.')}`;
       }
       const out = top.map(m => `${m.path}:${m.line}: ${m.text}`).join('\n');
-      return `Найдено совпадений: ${matches.length} (показаны топ-${top.length}):\n${out}`;
+      return `${t('Найдено совпадений')}: ${matches.length} (${t('показаны топ')}-${top.length}):\n${out}`;
     } catch (e: any) {
-      return `Ошибка поиска по коду: ${e.message}`;
+      return `${t('Ошибка поиска по коду')}: ${e.message}`;
     }
   }
 
@@ -4983,11 +4999,11 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       const toolName = parts.slice(2).join('__');
       
       if (settings.permExec === 'deny') {
-        return 'Ошибка: Выполнение внешних инструментов (MCP) запрещено настройками безопасности.';
+        return t('Ошибка: Выполнение внешних инструментов (MCP) запрещено настройками безопасности.');
       }
       if (settings.permExec === 'ask') {
         const allowed = await requestPermission('exec', `Запуск MCP инструмента: "${serverName}/${toolName}" с параметрами ${JSON.stringify(tool.params)}`);
-        if (!allowed) return 'Действие отклонено пользователем.';
+        if (!allowed) return t('Действие отклонено пользователем.');
       }
       
       try {
@@ -4997,16 +5013,16 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
             .filter((c: any) => c.type === 'text')
             .map((c: any) => c.text)
             .join('\n');
-          return texts || 'Инструмент выполнен успешно без текстового вывода.';
+          return texts || t('Инструмент выполнен успешно без текстового вывода.');
         }
         return JSON.stringify(result, null, 2);
       } catch (err: any) {
-        return `Ошибка вызова MCP инструмента: ${err.message || String(err)}`;
+        return `${t('Ошибка вызова MCP инструмента')}: ${err.message || String(err)}`;
       }
     }
   }
 
-  return 'Инструмент не поддерживается.';
+  return t('Инструмент не поддерживается.');
 }
 
 // ═══════════════════════════════════════════
@@ -5642,7 +5658,7 @@ function setupIframeInspection() {
       }
       hoveredElement = target;
       originalOutline = target.style.outline || '';
-      target.style.outline = '2px solid var(--accent-purple)';
+      target.style.outline = '2px solid var(--accent-green)';
       target.style.outlineOffset = '-2px';
       target.style.cursor = 'crosshair';
     });
@@ -5685,7 +5701,7 @@ function setupIframeInspection() {
       appendBubble(t('Система'), `🔍 ${t('Выбран элемент')} <${tagDesc}>. ${t('Контекст этого элемента будет добавлен к вашему следующему сообщению. Опишите в чате, что хотите изменить.')}`, true);
 
       // Show a brief focus hint on the chat input
-      chatInput.placeholder = '✏️ Опишите, что изменить в выбранном элементе...';
+      chatInput.placeholder = `✏️ ${t('Опишите, что изменить в выбранном элементе...')}`;
       chatInput.focus();
 
       // Do NOT force switch to plan mode - user stays in current mode
@@ -5753,7 +5769,7 @@ function updateComponentContextUI(element?: HTMLElement) {
   if (selectedComponentContext && element) {
     let tagDesc = element.tagName.toLowerCase();
     if (element.id) tagDesc += `#${element.id}`;
-    nameEl.textContent = `Компонент: <${tagDesc}>`;
+    nameEl.textContent = `${t('Компонент')}: <${tagDesc}>`;
     bar.classList.remove('hidden');
   } else {
     bar.classList.add('hidden');
@@ -5769,7 +5785,7 @@ function toggleInspectMode(forceVal?: boolean) {
   
   if (isInspectMode) {
     btn.classList.add('active');
-    previewIframe.style.outline = '2px dashed var(--accent-purple)';
+    previewIframe.style.outline = '2px dashed var(--accent-green)';
     previewIframe.style.outlineOffset = '-2px';
     previewIframe.style.cursor = 'crosshair';
     // Show inspect hint overlay
@@ -5777,7 +5793,7 @@ function toggleInspectMode(forceVal?: boolean) {
     if (!hint) {
       hint = document.createElement('div');
       hint.id = 'inspect-hint';
-      hint.style.cssText = 'position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:100; background:var(--accent-purple); color:#fff; padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; pointer-events:none; box-shadow:0 2px 8px rgba(0,0,0,0.15); display:flex; align-items:center; gap:6px;';
+      hint.style.cssText = 'position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:100; background:var(--accent-green); color:#fff; padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; pointer-events:none; box-shadow:0 2px 8px rgba(0,0,0,0.15); display:flex; align-items:center; gap:6px;';
       hint.innerHTML = `<i data-lucide="mouse-pointer-2"></i> ${t('Кликните на любой элемент в превью, чтобы выбрать его')}`;
       document.getElementById('iframe-wrapper')?.appendChild(hint);
       refreshIcons();
@@ -6357,10 +6373,10 @@ function updateModelLabel() {
   const m = settings.cachedModels.find(x => x.id === settings.model);
   
   if (m) {
-    const ctxInfo = m.contextLength ? ` · ${(m.contextLength / 1000).toFixed(0)}K контекст` : '';
+    const ctxInfo = m.contextLength ? ` · ${(m.contextLength / 1000).toFixed(0)}K ${t('контекст')}` : '';
     const cleanName = (m.name || m.id).split(' · ')[0];
     const textVal = cleanName + ctxInfo;
-    const titleVal = m.id + (m.isFree ? ' [Бесплатно]' : '') + ctxInfo;
+    const titleVal = m.id + (m.isFree ? ` [${t('Бесплатно')}]` : '') + ctxInfo;
 
     if (activeModelLabel) {
       activeModelLabel.textContent = textVal;
@@ -6371,7 +6387,7 @@ function updateModelLabel() {
       agenticLabel.title = titleVal;
     }
   } else {
-    const textVal = settings.model || 'Модель не выбрана';
+    const textVal = settings.model || t('Модель не выбрана');
     if (activeModelLabel) {
       activeModelLabel.textContent = textVal;
       activeModelLabel.title = '';
@@ -6420,6 +6436,14 @@ function playNotificationSound() {
 // ═══════════════════════════════════════════
 function init() {
   loadSettings(); 
+  // Sync sandbox preference to the main process on startup.
+  if (window.electronAPI?.setSandboxEnabled) {
+    window.electronAPI.setSandboxEnabled(settings.sandboxEnabled).catch(() => {});
+  }
+  // Sync language to the main process on startup.
+  if (window.electronAPI?.setLanguage) {
+    window.electronAPI.setLanguage(settings.language || 'ru').catch(() => {});
+  }
   if (window.electronAPI?.mcpReinit) {
     window.electronAPI.mcpReinit(JSON.stringify(settings.mcpServers || [])).catch(() => {});
   }
@@ -7721,14 +7745,14 @@ function renderSkillsList() {
         </button>
       </div>
       <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
-        Ключевые слова: ${skill.keywords.map(k => `<span style="background: var(--bg-panel-alt); padding: 1px 4px; border-radius: 2px; margin-right: 4px; border: 1px solid var(--border-default);">${esc(k)}</span>`).join('')}
+        ${t('Ключевые слова')}: ${skill.keywords.map(k => `<span style="background: var(--bg-panel-alt); padding: 1px 4px; border-radius: 2px; margin-right: 4px; border: 1px solid var(--border-default);">${esc(k)}</span>`).join('')}
       </div>
       <div style="font-size: 11px; background: var(--bg-panel-alt); padding: 8px; border-radius: 4px; max-height: 80px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; border: 1px solid var(--border-default);">${esc(skill.content)}</div>
     `;
 
     el.querySelector('.delete-skill-btn')?.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await confirmDialog(`Удалить навык «${skill.name}»?`, 'Удаление навыка');
+      const ok = await confirmDialog(`${t('Удалить навык')} «${skill.name}»?`, t('Удаление навыка'));
       if (ok) {
         dynamicSkills.splice(idx, 1);
         localStorage.setItem('ag_dynamic_skills', JSON.stringify(dynamicSkills));
@@ -7782,7 +7806,7 @@ function renderMcpServers() {
     
     el.querySelector('.delete-mcp-btn')?.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await confirmDialog(`Удалить MCP сервер «${s.name}»?`, 'Удаление MCP сервера');
+      const ok = await confirmDialog(`${t('Удалить MCP сервер')} «${s.name}»?`, t('Удаление MCP сервера'));
       if (ok) {
         settings.mcpServers?.splice(idx, 1);
         saveSettings();
@@ -8008,13 +8032,13 @@ async function runReflection() {
       localStorage.setItem('ag_dynamic_skills', JSON.stringify(dynamicSkills));
 
       bubble.querySelector('.message-text')!.innerHTML = `
-        <div style="background: rgba(0,0,0,0.02); border-left: 3px solid var(--accent-purple); padding: 12px; border-radius: 8px; border: 1px solid var(--border-default); border-left-width: 4px;">
+        <div style="background: rgba(0,0,0,0.02); border-left: 3px solid var(--accent-green); padding: 12px; border-radius: 8px; border: 1px solid var(--border-default); border-left-width: 4px;">
           <div style="font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; font-size: 13px;">
             <i data-lucide="brain-circuit" style="color: var(--text-primary); width:16px; height:16px;"></i>
             <span>${t('Рефлексия завершена: сформирован навык')} «${esc(parsedSkill.name)}»!</span>
           </div>
           <p style="margin: 0 0 8px 0; font-size: 11.5px; color: var(--text-secondary); line-height:1.45;">
-            Этот навык автоматически активируется в следующий раз при обнаружении схожих ключевых слов: 
+            ${t('Этот навык автоматически активируется в следующий раз при обнаружении схожих ключевых слов:')} 
             ${parsedSkill.keywords.map(k => `<span style="background: var(--bg-panel-alt); padding: 1px 4px; border-radius: 2px; font-size:10px; border: 1px solid var(--border-default);">${esc(k)}</span>`).join(' ')}.
           </p>
           <div style="margin: 0; padding: 8px; background: var(--bg-panel-alt); border-radius: 4px; font-family: monospace; font-size: 11px; max-height: 120px; overflow-y: auto; border: 1px solid var(--border-default);">${esc(parsedSkill.content)}</div>
@@ -8198,6 +8222,10 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
     microStepCount++;
 
     try {
+      // Abort any lingering fetch from a previous iteration before starting a new one.
+      if (activeAbortController) {
+        try { activeAbortController.abort(); } catch {}
+      }
       const resp = await fetchWithRetry(getLLMUrl('/chat/completions'), {
         method: 'POST',
         headers: getLLMHeaders(),
@@ -8251,14 +8279,14 @@ ${profile.codingStyle ? `- Стиль кода: ${profile.codingStyle}\n` : ''}$
           microHistory.push({ role: 'system', content: `Результат выполнения ${tool.rawTag}:\n${toolRes}` });
           // If the underlying execute_command returned a non-zero code, mark
           // the line as a warning even though no JS exception was thrown.
-          if (tool.type === 'execute_command' && /Код завершения:\s*(?!0\b)\d+/.test(toolRes)) {
+          if (tool.type === 'execute_command' && new RegExp(t('Код завершения') + ':\\s*(?!0\\b)\\d+').test(toolRes)) {
             setLineStatus(line, 'warn', 'alert-triangle');
           } else {
             setLineStatus(line, 'success', 'check');
           }
           toolsExecuted++;
         } catch (toolErr: any) {
-          microHistory.push({ role: 'system', content: `Ошибка при выполнении ${tool.rawTag}:\n${toolErr.message}` });
+          microHistory.push({ role: 'system', content: `${t('Ошибка при выполнении')} ${tool.rawTag}:\n${toolErr.message}` });
           setLineStatus(line, 'error', 'x');
           if (tool.type === 'execute_command') {
             microHistory.push({
@@ -8338,7 +8366,7 @@ function switchToPlanMode() {
 
 async function generateDraftStepForComponent(selectedContext: string, elementDesc: string) {
   const stepIdx = planSteps.length;
-  planSteps.push({ text: `[Авто-подбор...] Анализ элемента <${elementDesc}>`, enabled: true, status: 'pending' });
+  planSteps.push({ text: `[${t('Авто-подбор...')}] ${t('Анализ элемента')} <${elementDesc}>`, enabled: true, status: 'pending' });
   savePlanSteps();
 
   const latestWidget = document.querySelector('.plan-widget');
@@ -8478,9 +8506,9 @@ function showSnapshotDialog() {
         <input id="snapshot-dialog-desc" class="setting-input" style="width:100%;" placeholder="${t('Краткое описание состояния...')}" />
       </div>
       <div style="display:flex; gap:8px; justify-content:flex-end;">
-        <button id="snapshot-dialog-cancel" class="ghost-btn" style="padding:6px 14px; font-size:12px;">Отмена</button>
+        <button id="snapshot-dialog-cancel" class="ghost-btn" style="padding:6px 14px; font-size:12px;">${t('Отмена')}</button>
         <button id="snapshot-dialog-confirm" class="primary-btn" style="padding:6px 14px; font-size:12px;">
-          <i data-lucide="check"></i> Создать
+          <i data-lucide="check"></i> ${t('Создать')}
         </button>
       </div>
     </div>
@@ -8491,7 +8519,7 @@ function showSnapshotDialog() {
   backdrop.querySelector('#snapshot-dialog-confirm')?.addEventListener('click', async () => {
     const nameInput = backdrop.querySelector('#snapshot-dialog-name') as HTMLInputElement;
     const descInput = backdrop.querySelector('#snapshot-dialog-desc') as HTMLInputElement;
-    const name = nameInput?.value?.trim() || `Веха от ${new Date().toLocaleTimeString(getLocale())}`;
+    const name = nameInput?.value?.trim() || `${t('Веха от')} ${new Date().toLocaleTimeString(getLocale())}`;
     const desc = descInput?.value?.trim() || '';
     backdrop.remove();
     await createSnapshot(name, desc);
@@ -8572,8 +8600,8 @@ async function createSnapshot(name: string, desc: string) {
 
     const newSnapshot: ProjectSnapshot = {
       id: genId(),
-      name: name || `Веха от ${new Date().toLocaleTimeString(getLocale())}`,
-      desc: desc || `Снапшот состояния файлов проекта и текущего плана.`,
+      name: name || `${t('Веха от')} ${new Date().toLocaleTimeString(getLocale())}`,
+      desc: desc || `${t('Снапшот состояния файлов проекта и текущего плана.')}`,
       timestamp: Date.now(),
       planSteps: JSON.parse(JSON.stringify(planSteps)),
       files: filesData
@@ -8697,7 +8725,7 @@ async function renderSnapshotsUI() {
       </div>
       <div style="font-size: 11px; color: var(--text-muted); display:flex; gap:12px; margin-top:2px;">
         <span>📄 ${Object.keys(snap.files || {}).length}</span>
-        <span>📋 ${(snap.planSteps || []).length} шагов</span>
+        <span>📋 ${(snap.planSteps || []).length} ${t('шагов')}</span>
         <span>💾 ${formatBytes(new Blob([JSON.stringify(snap.files)]).size)}</span>
       </div>
       <div class="snapshot-card-actions">
@@ -8826,7 +8854,7 @@ async function loadWelcomeGitStatus(workspacePath: string, container: HTMLElemen
         if (lines.length > 10) {
           fileListHTML += `
             <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 4px;">
-              ... и еще ${lines.length - 10} файлов
+              ... ${t('и еще')} ${lines.length - 10} ${t('файлов')}
             </div>
           `;
         }

@@ -6,8 +6,43 @@ import * as childProcess from 'child_process';
 import { McpClient } from './lib/mcp';
 import { CoreEngineClient, findCoreBinary } from './lib/coreEngine';
 
+// ─── Main-process i18n ──────────────────────────────────────────────────────
+// Lightweight mirror of the renderer i18n dictionary for strings that live in
+// the main process (tray menu, native dialogs, terminal status messages).
+type MainLang = 'ru' | 'en' | 'zh';
+let mainLang: MainLang = 'ru';
+const MDICT: Record<string, [string, string]> = {
+  'Открыть 7/24 IDE':    ['Open 7/24 IDE', '打开 7/24 IDE'],
+  'Выход':               ['Quit', '退出'],
+  'Выбрать рабочую папку': ['Select workspace folder', '选择工作文件夹'],
+  'Ошибка: Рабочая папка не выбрана или не существует.': ['Error: Workspace folder not selected or does not exist.', '错误：未选择工作文件夹或文件夹不存在。'],
+  '⏱️ Превышено время ожидания (180с). Процесс остановлен.': ['⏱️ Timeout (180s). Process killed.', '⏱️ 超时 (180秒)。进程已终止。'],
+  '❌ Ошибка запуска:':   ['❌ Spawn error:', '❌ 启动错误：'],
+  'Процесс завершён с кодом': ['Process exited with code', '进程已退出，代码'],
+  'Подтверждение':        ['Confirmation', '确认'],
+  'Отмена':               ['Cancel', '取消'],
+  'OK':                   ['OK', '确定'],
+};
+function mt(ru: string): string {
+  if (mainLang === 'ru') return ru;
+  const e = MDICT[ru];
+  if (!e) return ru;
+  return mainLang === 'en' ? e[0] : e[1];
+}
+
 let activeProcesses: Map<string, childProcess.ChildProcess> = new Map();
 let activeMcpClients: Map<string, McpClient> = new Map();
+
+// Server-side sandbox preference (renderer sends this; main process enforces it).
+let serverSandboxEnabled = true;
+
+// ─── Command safety ─────────────────────────────────────────────────────────
+// Block dangerous commands that could destroy data outside the workspace.
+const DANGEROUS_CMD_RE = /\b(format|shutdown|reboot|del\s+\/[sSqQ]|rmdir\s+\/[sS]|rd\s+\/[sS]|rm\s+-rf\s+\/)\b/i;
+
+function isDangerousCommand(command: string): boolean {
+  return DANGEROUS_CMD_RE.test(command);
+}
 let coreEngine: CoreEngineClient | null = null;
 let coreEngineStartPromise: Promise<void> | null = null;
 let coreEngineFailureReason: string | null = null;
@@ -227,9 +262,9 @@ function setupTray() {
     mainWindow.focus();
   };
   const menu = Menu.buildFromTemplate([
-    { label: 'Открыть 7/24 IDE', click: showWindow },
+    { label: mt('Открыть 7/24 IDE'), click: showWindow },
     { type: 'separator' },
-    { label: 'Выход', click: () => { isQuitting = true; app.quit(); } },
+    { label: mt('Выход'), click: () => { isQuitting = true; app.quit(); } },
   ]);
   tray.setContextMenu(menu);
   tray.on('click', showWindow);
@@ -256,7 +291,7 @@ ipcMain.handle('select-folder', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
-    title: 'Выбрать рабочую папку'
+    title: mt('Выбрать рабочую папку')
   });
   if (result.canceled || result.filePaths.length === 0) {
     return null;
@@ -334,7 +369,9 @@ async function getFilesRecursively(
 
 ipcMain.handle('read-dir', async (_event, workspacePath: string) => {
   try {
-    if (!fs.existsSync(workspacePath)) return [];
+    if (!workspacePath || !fs.existsSync(workspacePath)) return [];
+    const stat = await fs.promises.stat(workspacePath);
+    if (!stat.isDirectory()) return [];
     return await getFilesRecursively(workspacePath, workspacePath);
   } catch (err: any) {
     console.error('Error reading directory:', err);
@@ -342,30 +379,32 @@ ipcMain.handle('read-dir', async (_event, workspacePath: string) => {
   }
 });
 
-// Read file contents (with optional sandbox check)
-ipcMain.handle('read-file', async (_event, filePath: string, workspacePath: string, sandbox: boolean) => {
+// Read file contents (with server-side sandbox enforcement)
+ipcMain.handle('read-file', async (_event, filePath: string, workspacePath: string, _sandbox?: boolean) => {
   const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(workspacePath, filePath);
   const resolvedPath = path.resolve(absolutePath);
   const resolvedWorkspace = path.resolve(workspacePath);
 
   // Use path.relative for robust containment check (prevents path traversal)
+  // Sandbox is enforced server-side — ignores client-provided parameter.
   const rel = path.relative(resolvedWorkspace, resolvedPath);
-  if (sandbox && (rel.startsWith('..') || path.isAbsolute(rel))) {
+  if (serverSandboxEnabled && (rel.startsWith('..') || path.isAbsolute(rel))) {
     throw new Error(`Access Denied: Path is outside the sandbox: ${resolvedPath}`);
   }
 
   return await fs.promises.readFile(resolvedPath, 'utf-8');
 });
 
-// Write file contents (with optional sandbox check)
-ipcMain.handle('write-file', async (_event, filePath: string, content: string, workspacePath: string, sandbox: boolean) => {
+// Write file contents (with server-side sandbox enforcement)
+ipcMain.handle('write-file', async (_event, filePath: string, content: string, workspacePath: string, _sandbox?: boolean) => {
   const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(workspacePath, filePath);
   const resolvedPath = path.resolve(absolutePath);
   const resolvedWorkspace = path.resolve(workspacePath);
 
   // Use path.relative for robust containment check (prevents path traversal)
+  // Sandbox is enforced server-side — ignores client-provided parameter.
   const rel = path.relative(resolvedWorkspace, resolvedPath);
-  if (sandbox && (rel.startsWith('..') || path.isAbsolute(rel))) {
+  if (serverSandboxEnabled && (rel.startsWith('..') || path.isAbsolute(rel))) {
     throw new Error(`Access Denied: Path is outside the sandbox: ${resolvedPath}`);
   }
 
@@ -397,6 +436,17 @@ ipcMain.handle('get-app-version', () => {
   try { return app.getVersion(); } catch { return ''; }
 });
 
+// Server-side sandbox preference — renderer syncs this on settings change.
+ipcMain.handle('set-sandbox-enabled', (_event, enabled: boolean) => {
+  serverSandboxEnabled = !!enabled;
+  return true;
+});
+
+// Server-side language preference — renderer syncs this on settings change.
+ipcMain.handle('set-language', (_event, lang: string) => {
+  if (lang === 'en' || lang === 'zh' || lang === 'ru') mainLang = lang;
+  return true;
+});
 ipcMain.handle('delete-file', async (_event, filePath: string, workspacePath: string) => {
   try {
     const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(workspacePath, filePath);
@@ -515,7 +565,12 @@ ipcMain.handle('discard-shadow-workspace', async (_event, workspacePath: string)
 ipcMain.handle('exec-command', async (_event, command: string, workspacePath: string) => {
   return new Promise((resolve) => {
     if (!workspacePath || !fs.existsSync(workspacePath)) {
-      resolve({ code: 1, stdout: '', stderr: 'Ошибка: Рабочая папка не выбрана или не существует.' });
+      resolve({ code: 1, stdout: '', stderr: mt('Ошибка: Рабочая папка не выбрана или не существует.') });
+      return;
+    }
+
+    if (isDangerousCommand(command)) {
+      resolve({ code: 1, stdout: '', stderr: 'Blocked: dangerous command refused by sandbox.' });
       return;
     }
 
@@ -534,7 +589,7 @@ ipcMain.handle('exec-command', async (_event, command: string, workspacePath: st
 ipcMain.handle('git-commit', async (_event, message: string, workspacePath: string) => {
   return new Promise((resolve) => {
     if (!workspacePath || !fs.existsSync(workspacePath)) {
-      resolve({ code: 1, stdout: '', stderr: 'Ошибка: Рабочая папка не выбрана или не существует.' });
+      resolve({ code: 1, stdout: '', stderr: mt('Ошибка: Рабочая папка не выбрана или не существует.') });
       return;
     }
     childProcess.execFile('git', ['commit', '-m', message], { cwd: workspacePath, timeout: 180000, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
@@ -548,11 +603,15 @@ ipcMain.handle('git-commit', async (_event, message: string, workspacePath: stri
 });
 
 // Execute shell command with LIVE streaming output to the renderer terminal panel
-// Execute shell command with LIVE streaming output to the renderer terminal panel
 ipcMain.handle('exec-command-stream', async (_event, command: string, workspacePath: string, execId: string) => {
   return new Promise((resolve) => {
     if (!workspacePath || !fs.existsSync(workspacePath)) {
-      resolve({ code: 1, stdout: '', stderr: 'Ошибка: Рабочая папка не выбрана или не существует.' });
+      resolve({ code: 1, stdout: '', stderr: mt('Ошибка: Рабочая папка не выбрана или не существует.') });
+      return;
+    }
+
+    if (isDangerousCommand(command)) {
+      resolve({ code: 1, stdout: '', stderr: 'Blocked: dangerous command refused by sandbox.' });
       return;
     }
 
@@ -579,10 +638,10 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
 
     const timer = setTimeout(() => {
       if (!settled) {
-        send('system', '\n⏱️ Превышено время ожидания (180с). Процесс остановлен.\n');
+        send('system', '\n' + mt('⏱️ Превышено время ожидания (180с). Процесс остановлен.') + '\n');
         try {
           if (process.platform === 'win32' && child.pid) {
-            childProcess.exec(`taskkill /pid ${child.pid} /t /f`);
+            childProcess.execFile('taskkill', ['/pid', String(child.pid), '/t', '/f']);
           } else {
             child.kill('SIGTERM');
           }
@@ -606,7 +665,7 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
       settled = true;
       clearTimeout(timer);
       activeProcesses.delete(execId);
-      send('system', `\n❌ Ошибка запуска: ${err.message}\n`);
+      send('system', `\n${mt('❌ Ошибка запуска:')} ${err.message}\n`);
       resolve({ code: 1, stdout, stderr: stderr + '\n' + err.message });
     });
     child.on('close', (code) => {
@@ -614,7 +673,7 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
       settled = true;
       clearTimeout(timer);
       activeProcesses.delete(execId);
-      send('system', `\n[Процесс завершён с кодом ${code ?? 0}]\n`);
+      send('system', `\n[${mt('Процесс завершён с кодом')} ${code ?? 0}]\n`);
       resolve({ code: code ?? 0, stdout, stderr });
     });
   });
@@ -636,7 +695,7 @@ ipcMain.handle('exec-command-kill', async (_event, execId: string) => {
   if (child) {
     try {
       if (process.platform === 'win32') {
-        childProcess.exec(`taskkill /pid ${child.pid} /t /f`);
+        childProcess.execFile('taskkill', ['/pid', String(child.pid), '/t', '/f']);
       } else {
         child.kill('SIGINT');
       }
@@ -867,14 +926,15 @@ ipcMain.handle('open-external', async (_event, url: string) => {
 });
 
 // Native confirm dialog
-ipcMain.handle('show-confirm', async (_event, message: string, title: string) => {
+ipcMain.handle('show-confirm', async (_event, message: string, title: string, lang?: string) => {
   if (!mainWindow) return false;
+  if (lang && (lang === 'en' || lang === 'zh' || lang === 'ru')) mainLang = lang;
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'question',
-    buttons: ['Отмена', 'OK'],
+    buttons: [mt('Отмена'), mt('OK')],
     defaultId: 1,
     cancelId: 0,
-    title: title || 'Подтверждение',
+    title: title || mt('Подтверждение'),
     message: message,
   });
   return result.response === 1;
@@ -1048,7 +1108,7 @@ app.on('before-quit', () => {
   for (const [execId, child] of activeProcesses.entries()) {
     try {
       if (process.platform === 'win32' && child.pid) {
-        childProcess.exec(`taskkill /pid ${child.pid} /t /f`);
+        childProcess.execFile('taskkill', ['/pid', String(child.pid), '/t', '/f']);
       } else {
         child.kill('SIGTERM');
       }

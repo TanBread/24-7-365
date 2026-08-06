@@ -109,7 +109,7 @@ export class McpClient {
         // On Windows with shell:true the child is a cmd wrapper — kill the
         // whole process tree, otherwise the actual MCP server leaks.
         if (process.platform === 'win32' && pid) {
-          childProcess.exec(`taskkill /pid ${pid} /t /f`);
+          childProcess.execFile('taskkill', ['/pid', String(pid), '/t', '/f']);
         } else {
           this.child.kill();
         }

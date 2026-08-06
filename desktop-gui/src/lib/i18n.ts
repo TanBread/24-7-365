@@ -16,6 +16,7 @@ const DICT: Record<string, [string, string]> = {
 
   // ─── Setup banner ───
   'Для начала работы добавьте API-ключ OpenRouter в Настройках': ['Add your OpenRouter API key in Settings to get started', '请在设置中添加 OpenRouter API 密钥以开始使用'],
+  'Открыть настройки': ['Open settings', '打开设置'],
 
   // ─── Sidebar ───
   'Новый чат': ['New chat', '新对话'],
@@ -66,6 +67,8 @@ const DICT: Record<string, [string, string]> = {
   'Задачи': ['Tasks', '任务'],
   'Визуальный тайм-тревел (Снапшоты проекта)': ['Visual time-travel (project snapshots)', '可视化时间旅行（项目快照）'],
   'Снапшоты': ['Snapshots', '快照'],
+  'Файлов изменено': ['Files changed', '文件已修改'],
+  'Токены последнего запроса': ['Last request tokens', '上次请求的 token 数'],
   'Ожидает подтверждения': ['Awaiting confirmation', '等待确认'],
   'Выбрать элемент (Click-to-Plan)': ['Select element (Click-to-Plan)', '选择元素 (Click-to-Plan)'],
   'Инспект': ['Inspect', '检查'],
@@ -134,6 +137,7 @@ const DICT: Record<string, [string, string]> = {
   'Выберите светлую или тёмную тему': ['Choose a light or dark theme', '选择浅色或深色主题'],
   'Светлая': ['Light', '浅色'],
   'Тёмная': ['Dark', '深色'],
+  'Тёмная тема': ['Dark theme', '深色主题'],
   'Системная': ['System', '系统'],
   'Шрифт интерфейса': ['Interface font', '界面字体'],
   'Настройте шрифт, используемый во всём интерфейсе': ['Set the font used across the interface', '设置整个界面使用的字体'],
@@ -632,12 +636,107 @@ const DICT: Record<string, [string, string]> = {
   'Произошла ошибка сборки при запуске команды. Исправь файлы кода, чтобы сборка проходила успешно.': ['A build error occurred while running the command. Fix the code files so the build succeeds.', '运行命令时发生构建错误。请修复代码文件以使构建成功。'],
   'Автоматический чекпоинт перед действием агента (можно откатиться).': ['Automatic checkpoint before agent action (can be rolled back).', '智能体操作前自动检查点（可回滚）。'],
   'Папка проекта не выбрана. Снапшоты недоступны.': ['Project folder not selected. Snapshots are unavailable.', '未选择项目文件夹。快照不可用。'],
+
+  // ─── File size units ───
+  'Б': ['B', '字节'],
+  'КБ': ['KB', 'KB'],
+  'МБ': ['MB', 'MB'],
+  'ГБ': ['GB', 'GB'],
+
+  // ─── Provider / Model labels ───
+  'Провайдер:': ['Provider:', '提供商：'],
+
+  // ─── Tool operation labels ───
+  'Чтение:': ['Reading:', '读取：'],
+  'Исследование:': ['Exploring:', '探索：'],
+  'Создание:': ['Creating:', '创建：'],
+  'Правка:': ['Editing:', '编辑：'],
+  'Выполнение:': ['Running:', '运行：'],
+  'Поиск компонентов...': ['Searching components...', '搜索组件...'],
+  'Поиск в коде:': ['Code search:', '代码搜索：'],
+  'Анализ:': ['Analyzing:', '分析：'],
+
+  // ─── Terminal panel ───
+  'код': ['code', '代码'],
+
+  // ─── Error handling ───
+  'Команда:': ['Command:', '命令：'],
+  'Неизвестная ошибка выполнения команды': ['Unknown command execution error', '未知命令执行错误'],
+
+  // ─── Tool execution results ───
+  'Ошибка: Запись файлов, редактирование и выполнение команд заблокированы в режиме «План». Переключитесь в режим «Build» или завершите текущий шаг плана.': ['Error: File writes, edits, and command execution are blocked in Plan mode. Switch to Build mode or complete the current plan step.', '错误：在计划模式下禁止文件写入、编辑和命令执行。请切换到构建模式或完成当前计划步骤。'],
+  'ОШИБКА: Рабочая папка не выбрана. Выберите папку проекта в настройках или на боковой панели.': ['ERROR: No workspace folder selected. Choose a project folder in settings or on the sidebar.', '错误：未选择工作文件夹。请在设置或侧边栏中选择项目文件夹。'],
+  'Действие отклонено пользователем.': ['Action rejected by user.', '操作被用户拒绝。'],
+  'Ошибка: Файл находится за пределами области работы. Включите «Песочницу: выкл» для доступа к файлам за пределами папки проекта.': ['Error: File is outside the workspace. Disable "Sandbox: off" to access files outside the project folder.', '错误：文件在工作区之外。关闭"沙箱"以访问项目文件夹外的文件。'],
+  'ОШИБКА: Невозможно прочитать — модель не поддерживает изображения. Попробуйте текстовый файл.': ['ERROR: Cannot read — model does not support images. Try a text file.', '错误：无法读取——模型不支持图片。请尝试文本文件。'],
+  'Ошибка: Путь находится за пределами области работы. Включите «Песочницу: выкл» для доступа к файлам за пределами папки проекта.': ['Error: Path is outside the workspace. Disable "Sandbox: off" to access files outside the project folder.', '错误：路径在工作区之外。关闭"沙箱"以访问项目文件夹外的文件。'],
+  'ОШИБКА: Запись файлов запрещена настройками разрешений. Измените «Запись» в Настройках → Разрешения.': ['ERROR: File writes are disabled in permission settings. Change "Write" in Settings → Permissions.', '错误：权限设置中禁止文件写入。请在设置→权限中更改"写入"。'],
+  'ОШИБКА СИНТАКСИСА: Запись файла отклонена из-за некорректного синтаксиса. Исправьте код и повторите попытку.': ['SYNTAX ERROR: File write rejected due to invalid syntax. Fix the code and try again.', '语法错误：由于语法不正确，文件写入被拒绝。请修复代码后重试。'],
+  'Действие отклонено пользователем в режиме Авто-Ревью.': ['Action rejected by user in Auto-Review mode.', '操作在自动审查模式下被用户拒绝。'],
+  'Успешно записано на диск.': ['Successfully written to disk.', '已成功写入磁盘。'],
+  'Ошибка: Не удалось прочитать оригинальный файл для редактирования. Проверьте, существует ли файл.': ['Error: Failed to read original file for editing. Check if the file exists.', '错误：无法读取要编辑的原始文件。请检查文件是否存在。'],
+  'ОШИБКА ПАТЧА: Запрещено переписывать весь файл целиком! Используйте <search> и <replace> для точечных правок.': ['PATCH ERROR: Overwriting the entire file is forbidden! Use <search> and <replace> for targeted edits.', '补丁错误：禁止覆盖整个文件！请使用 <search> 和 <replace> 进行精确编辑。'],
+  'ОШИБКА ПАТЧА: Блок <search> встречается в файле несколько раз. Уточните содержимое для однозначного поиска.': ['PATCH ERROR: <search> block appears multiple times in the file. Provide more context for unique matching.', '补丁错误：<search> 块在文件中出现多次。请提供更多上下文以进行唯一匹配。'],
+  'ОШИБКА ПАТЧА: Не удалось найти блок <search> в файле. Проверьте правильность текста для поиска.': ['PATCH ERROR: <search> block not found in the file. Check the search text is correct.', '补丁错误：在文件中未找到 <search> 块。请检查搜索文本是否正确。'],
+  'ОШИБКА СИНТАКСИСА: Изменение файла отклонено из-за некорректного синтаксиса. Исправьте код и повторите попытку.': ['SYNTAX ERROR: File modification rejected due to invalid syntax. Fix the code and try again.', '语法错误：由于语法不正确，文件修改被拒绝。请修复代码后重试。'],
+  'Изменения успешно применены к файлу.': ['Changes applied to file successfully.', '更改已成功应用到文件。'],
+  'ОШИБКА КРИТИЧЕСКОГО УРОВНЯ: Использование execute_command для записи в файлы ЗАПРЕЩЕНО. Используйте <write_file> или <edit_file>.': ['CRITICAL ERROR: Using execute_command to write files is FORBIDDEN. Use <write_file> or <edit_file>.', '严重错误：禁止使用 execute_command 写入文件。请使用 <write_file> 或 <edit_file>。'],
+  'ОШИБКА: Выполнение команд терминала запрещено настройками разрешений. Измените «Терминал» в Настройках → Разрешения.': ['ERROR: Terminal command execution is disabled in permission settings. Change "Terminal" in Settings → Permissions.', '错误：权限设置中禁止执行终端命令。请在设置→权限中更改"终端"。'],
+  'Выполнение команды отклонено пользователем.': ['Command execution rejected by user.', '命令执行被用户拒绝。'],
+  'Команда не выполнена (код ${res.code}). Пользователь запросил пересборку плана и исправление ошибок.': ['Command failed (code ${res.code}). User requested plan rebuild and error fix.', '命令失败（代码 ${res.code}）。用户请求重建计划并修复错误。'],
+  'Код завершения:': ['Exit code:', '退出代码：'],
+  'Stdout:': ['Stdout:', '标准输出：'],
+  'Stderr:': ['Stderr:', '标准错误：'],
+
+  // ─── Components / Search ───
+  'Ошибка при получении списка компонентов:': ['Error getting component list:', '获取组件列表错误：'],
+  'Ошибка при проверке размера изображения:': ['Error checking image size:', '检查图片大小错误：'],
+  'Ошибка: пустой поисковый запрос.': ['Error: empty search query.', '错误：搜索查询为空。'],
+  'Найдено:': ['Found:', '找到：'],
+  'По запросу совпадений не найдено в файлах проекта.': ['No matches found in project files.', '在项目文件中未找到匹配项。'],
+  'Найдено совпадений:': ['Matches found:', '找到匹配：'],
+  'показаны топ-': ['showing top-', '显示前'],
+  'Ошибка поиска по коду:': ['Code search error:', '代码搜索错误：'],
+
+  // ─── MCP ───
+  'Ошибка: Выполнение внешних инструментов (MCP) запрещено настройками разрешений. Измените «MCP» в Настройках → Разрешения.': ['ERROR: External tool (MCP) execution is disabled in permission settings. Change "MCP" in Settings → Permissions.', '错误：权限设置中禁止执行外部工具 (MCP)。请在设置→权限中更改"MCP"。'],
+  'Инструмент выполнен успешно без текстового вывода.': ['Tool executed successfully with no text output.', '工具执行成功，无文本输出。'],
+  'Ошибка вызова MCP инструмента:': ['MCP tool call error:', 'MCP 工具调用错误：'],
+  'Инструмент не поддерживается.': ['Tool not supported.', '工具不支持。'],
+
+  // ─── Component context ───
+  'Компонент:': ['Component:', '组件：'],
+
+  // ─── Snapshot ───
+  'Снапшот состояния файлов проекта и текущего плана.': ['Snapshot of project files and current plan.', '项目文件和当前计划的快照。'],
+  'и еще': ['and', '以及'],
+
+  // ─── Skills ───
+  'Ключевые слова:': ['Keywords:', '关键词：'],
+  'Этот навык автоматически активируется в следующий раз при обнаружении схожих ключевых слов:': ['This skill will automatically activate next time similar keywords are detected:', '当检测到类似关键词时，此技能将自动激活：'],
+
+  // ─── MCP server dialogs ───
+  'Удалить MCP сервер': ['Delete MCP server', '删除 MCP 服务器'],
+
+  // ─── Click-to-Plan ───
+  'Опишите, что изменить в выбранном элементе...': ['Describe what to change in the selected element...', '描述要对所选元素进行的更改...'],
+
+  // ─── Misc UI ───
+  'Сообщений:': ['Messages:', '消息：'],
+  '[Авто-подбор...] Анализ элемента': ['[Auto-detect...] Analyzing element', '[自动检测...] 分析元素'],
+
+  // ─── FREE badge ───
+  'FREE': ['FREE', '免费'],
 };
 
 let currentLang: Lang = 'ru';
 
 export function setLang(lang: Lang) {
   currentLang = lang;
+  // Sync the HTML lang attribute for accessibility and browser auto-translation.
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = lang === 'ru' ? 'ru' : lang === 'zh' ? 'zh-CN' : 'en';
+  }
 }
 
 export function getLang(): Lang {

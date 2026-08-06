@@ -22,6 +22,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App version (for the Settings/About labels)
   getAppVersion: () => ipcRenderer.invoke('get-app-version') as Promise<string>,
 
+  // Server-side sandbox preference
+  setSandboxEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('set-sandbox-enabled', enabled) as Promise<boolean>,
+
+  // Server-side language preference
+  setLanguage: (lang: string) =>
+    ipcRenderer.invoke('set-language', lang) as Promise<boolean>,
+
   // Shadow workspace operations
   prepareShadowWorkspace: (workspacePath: string) =>
     ipcRenderer.invoke('prepare-shadow-workspace', workspacePath),
@@ -90,8 +98,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized') as Promise<boolean>,
 
   // Native confirm dialog
-  showConfirm: (message: string, title?: string) =>
-    ipcRenderer.invoke('show-confirm', message, title) as Promise<boolean>,
+  showConfirm: (message: string, title?: string, lang?: string) =>
+    ipcRenderer.invoke('show-confirm', message, title, lang) as Promise<boolean>,
 
   // Minimize-to-tray toggle
   setMinimizeToTray: (enabled: boolean) =>
