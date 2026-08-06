@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   executeCommand: (command: string, workspacePath: string) =>
     ipcRenderer.invoke('exec-command', command, workspacePath),
 
+  // Create a git commit (message passed as an argument, no shell)
+  gitCommit: (message: string, workspacePath: string) =>
+    ipcRenderer.invoke('git-commit', message, workspacePath),
+
   // Execute terminal command with live streaming output
   executeCommandStream: (command: string, workspacePath: string, execId: string) =>
     ipcRenderer.invoke('exec-command-stream', command, workspacePath, execId),

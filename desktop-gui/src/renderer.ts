@@ -22,6 +22,7 @@ declare global {
       getAppVersion: () => Promise<string>;
       openExternal: (url: string) => Promise<boolean>;
       executeCommand: (command: string, workspacePath: string) => Promise<{ code: number; stdout: string; stderr: string }>;
+      gitCommit: (message: string, workspacePath: string) => Promise<{ code: number; stdout: string; stderr: string }>;
       executeCommandStream: (command: string, workspacePath: string, execId: string) => Promise<{ code: number; stdout: string; stderr: string }>;
       onCommandChunk: (callback: (data: { execId: string; stream: string; chunk: string }) => void) => () => void;
       secureKeySet: (apiKey: string) => Promise<boolean>;
@@ -250,7 +251,7 @@ const BUILTIN_SKILLS: Skill[] = [
 ];
 
 // ─── Constants ───
-const SYSTEM_PROMPT_COMMON = `Ты — экспертный ИИ-инженер, интегрированный в 7/24 IDE. Твой уровень: Cursor / OpenCode / Codex.
+const SYSTEM_PROMPT_COMMON = `Ты — экспертный ИИ-инженер, интегрированный в 7/24 IDE. Твой уровень: Cursor / OpenCode / Codex. Текущий год: 2026.
 
 ## СТРОГИЙ СТИЛЬ ОБЩЕНИЯ (Zero-Fluff / Принудительный Function Calling)
 - ТЕБЕ КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать любые вежливые фразы, приветствия, извинения или пояснительный текст вокруг тегов инструментов (например, "Конечно, вот...", "Готово!", "Я обновил...").
@@ -490,7 +491,7 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
 let settings: AppSettings = {
   apiKey: '', model: '', cachedModels: [], lastModelsRefresh: 0,
   language: 'ru', showExamples: true, showLoading: true, autosave: true, sounds: false,
-  theme: 'light', uiFont: 'Inter', codeFont: 'JetBrains Mono', fontSize: 13,
+  theme: 'dark', uiFont: 'Inter', codeFont: 'JetBrains Mono', fontSize: 13,
   temperature: 0.2, maxTokens: 4096, autoCheckpoint: true, fallbackModel: '', onboardingDone: false, systemPrompt: DEFAULT_SYSTEM_PROMPT,
   sandboxEnabled: true,
   permRead: 'auto',
@@ -747,9 +748,9 @@ interface ModelInfo {
 // concise notification when new models appear, models disappear, or prices
 // change. Designed to run in the background at startup.
 async function refreshModelsInBackground() {
-  if (!settings.apiKey) return;
+  if (!settings.apiKey && settings.llmProvider !== 'ollama') return;
   try {
-    const fresh = await fetchModels(settings.apiKey);
+    const fresh = await fetchModels(settings.llmProvider, settings.ollamaUrl, settings.apiKey);
     if (!fresh.length) return;
 
     const oldList = settings.cachedModels || [];
@@ -1337,8 +1338,8 @@ function parseMarkdown(text: string): string {
   // Regexes matching tool tags with either single- or double-quoted attributes.
   const readDirRegex = /<read_dir\b[^>]*\s*(?:\/>|>\s*<\/read_dir>|>)/g;
   const readFileRegex = /<read_file\b[^>]*\s*(?:\/>|>\s*<\/read_file>|>)/g;
-  const writeFileRegex = /<write_file\b[^>]*>[\s\S]*?(?:<\/write_file>|$)/g;
-  const editFileRegex = /<edit_file\b[^>]*>[\s\S]*?(?:<\/edit_file>|$)/g;
+  const writeFileRegex = /<write_file\b[^>]*>[\s\S]*?(?:<\/write_file>|(?=<write_file\b)|$)/g;
+  const editFileRegex = /<edit_file\b[^>]*>[\s\S]*?(?:<\/edit_file>|(?=<edit_file\b)|$)/g;
   const execCmdRegex = /<execute_command\b[^>]*\s*(?:\/>|>\s*<\/execute_command>|>)/g;
   const searchCodeRegex = /<search_code\b[^>]*\s*(?:\/>|>\s*<\/search_code>|>)/g;
   const listCompRegex = /<list_components\s*(?:\/>|>\s*<\/list_components>|>)/g;
@@ -1568,12 +1569,12 @@ function formatToolTags(text: string, isHistory = false, toolResults: string[] =
     return replaceTag(match, 'execute_command', `Запуск команды: ${command}`, '');
   });
 
-  html = html.replace(/<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|$)/g, (match, attrsRaw, content) => {
+  html = html.replace(/<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|(?=<write_file\b)|$)/g, (match, attrsRaw, content) => {
     const path = parseXmlAttrs(attrsRaw).path || '';
     return replaceTag(match, 'write_file', `Создание файла: ${path}`, content);
   });
 
-  html = html.replace(/<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|$)/g, (match, attrsRaw, inner) => {
+  html = html.replace(/<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|(?=<edit_file\b)|$)/g, (match, attrsRaw, inner) => {
     const path = parseXmlAttrs(attrsRaw).path || '';
     return replaceTag(match, 'edit_file', `Правка файла: ${path}`, inner);
   });
@@ -2833,7 +2834,7 @@ function showCommitVerificationCard(planId: string, suggestedMsg: string, worksp
       div.remove();
       
       appendBubble(t('Система'), `🤖 ${t('Создаю коммит...')} "${fullMsg}"`, true);
-      const commitRes = await window.electronAPI.executeCommand(`git commit -m "${fullMsg.replace(/"/g, "'")}"`, workspacePath);
+      const commitRes = await window.electronAPI.gitCommit(fullMsg, workspacePath);
       if (commitRes.code === 0) {
         appendBubble(t('Система'), `✅ ${t('Авто-коммит успешно создан:')} <code>${esc(fullMsg)}</code>`, true);
       } else {
@@ -2888,7 +2889,7 @@ async function markStepCompleted(planId: string, idx: number) {
           } else {
             const prefix = settings.gitCommitPrefix || '[AI]';
             const fullMsg = `${prefix} ${commitMsg}`;
-            const commitRes = await window.electronAPI.executeCommand(`git commit -m "${fullMsg.replace(/"/g, "'")}"`, activeProject.workspacePath);
+            const commitRes = await window.electronAPI.gitCommit(fullMsg, activeProject.workspacePath);
             
             if (commitRes.code === 0) {
               appendBubble(t('Система'), `✅ ${t('Авто-коммит успешно создан:')} <code>${esc(fullMsg)}</code>`, true);
@@ -3162,8 +3163,10 @@ function updateContextBar() {
   barEl.classList.toggle('warning', pct > 60);
   barEl.classList.toggle('danger', pct > 85);
   const total = tokenAccumulated.prompt + tokenAccumulated.completion;
-  labelEl.textContent = `${(lastUsed / 1000).toFixed(1)}K (${t('запрос')}) · ${(total / 1000).toFixed(0)}K (${t('всего')}) / ${(maxCtx / 1000).toFixed(0)}K`;
-  labelEl.title = `${t('Последний запрос')}: ${lastRequestTokens.prompt.toLocaleString()} prompt + ${lastRequestTokens.completion.toLocaleString()} completion\n${t('Всего за сессию')}: ${tokenAccumulated.prompt.toLocaleString()} + ${tokenAccumulated.completion.toLocaleString()}`;
+  const msgCount = activeProject ? activeProject.chatHistory.filter((m: any) => m.role === 'assistant').length : 0;
+  const tokPerMsg = msgCount > 0 ? Math.round(total / msgCount) : 0;
+  labelEl.textContent = `${(lastUsed / 1000).toFixed(1)}K (${t('запрос')}) · ${(total / 1000).toFixed(0)}K (${t('всего')}) · ~${tokPerMsg.toLocaleString()} tok/msg / ${(maxCtx / 1000).toFixed(0)}K`;
+  labelEl.title = `${t('Последний запрос')}: ${lastRequestTokens.prompt.toLocaleString()} prompt + ${lastRequestTokens.completion.toLocaleString()} completion\n${t('Всего за сессию')}: ${tokenAccumulated.prompt.toLocaleString()} + ${tokenAccumulated.completion.toLocaleString()}\nСообщений: ${msgCount} · ~${tokPerMsg.toLocaleString()} tok/msg`;
 }
 
 // Rough token estimate: ~4 chars per token for mixed RU/EN.
@@ -3301,14 +3304,16 @@ function parseTools(text: string): AgentTool[] {
   }
 
   // 3. Write file
-  const rawWriteFile = /<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|$)/g;
+  // Guarded so an unterminated <write_file> (truncated output) never
+  // swallows the body of the next <write_file> tag.
+  const rawWriteFile = /<write_file\b([^>]*)>([\s\S]*?)(?:<\/write_file>|(?=<write_file\b)|$)/g;
   while ((match = rawWriteFile.exec(text)) !== null) {
     const attrs = parseXmlAttrs(match[1]);
     if (attrs.path) tools.push({ type: 'write_file', params: { path: attrs.path, content: match[2] }, rawTag: match[0] });
   }
 
   // 4. Edit file
-  const rawEditFile = /<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|$)/g;
+  const rawEditFile = /<edit_file\b([^>]*)>([\s\S]*?)(?:<\/edit_file>|(?=<edit_file\b)|$)/g;
   while ((match = rawEditFile.exec(text)) !== null) {
     const attrs = parseXmlAttrs(match[1]);
     const innerContent = match[2];
@@ -3491,17 +3496,7 @@ function updatePlanProgressBar() {
 }
 
 function applyTheme() {
-  const theme = settings.theme || 'light';
-  document.body.classList.remove('theme-dark');
-  
-  if (theme === 'dark') {
-    document.body.classList.add('theme-dark');
-  } else if (theme === 'system') {
-    const darkMatches = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (darkMatches) {
-      document.body.classList.add('theme-dark');
-    }
-  }
+  document.body.classList.add('theme-dark');
 }
 
 // Re-apply the theme live when the OS scheme changes (only matters for "system").
@@ -3621,7 +3616,7 @@ function removePinnedFile(filePath: string) {
 
 async function handleUserMessage(text: string) {
   if (isGenerating || !text.trim()) return;
-  if (!settings.apiKey) { openSettings(); return; }
+  if (!settings.apiKey && settings.llmProvider !== 'ollama') { openSettings(); return; }
   if (!settings.model) { appendBubble('7/24 IDE', t('⚠️ Выберите модель в Настройках → Модели.'), true); return; }
 
   // Auto-update user profile from query
@@ -4171,6 +4166,7 @@ async function streamChatCompletionWithFallback(messages: any[]) {
 async function streamChatCompletion(messages: any[], model: string, apiKey: string) {
   setCurrentAction(t('🧠 Генерация ответа...'));
   removeThinking();
+  const streamStartTime = Date.now();
   const modelLabel = settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
   const bubble = document.createElement('div');
   bubble.className = 'chat-message ai streaming';
@@ -4396,9 +4392,14 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
       const c = usage.completion_tokens || 0;
       const cost = estimateCost(p, c);
       const costStr = cost > 0 ? ` · ~$${cost.toFixed(4)}` : '';
-      const titleText = `Prompt: ${p.toLocaleString()}, Completion: ${c.toLocaleString()}\n${t('Всего за сессию')}: ${tokenAccumulated.prompt.toLocaleString()} prompt + ${tokenAccumulated.completion.toLocaleString()} completion`;
+      const elapsed = ((Date.now() - streamStartTime) / 1000);
+      const tokPerSec = elapsed > 0 ? (c / elapsed).toFixed(1) : '—';
+      const totalSessionTokens = tokenAccumulated.prompt + tokenAccumulated.completion;
+      const msgCount = activeProject ? activeProject.chatHistory.filter((m: any) => m.role === 'assistant').length : 0;
+      const tokPerMsg = msgCount > 0 ? Math.round(totalSessionTokens / msgCount) : 0;
+      const titleText = `Prompt: ${p.toLocaleString()}, Completion: ${c.toLocaleString()}\n${tokPerSec} tok/s · ~${tokPerMsg.toLocaleString()} tok/msg\n${t('Всего за сессию')}: ${tokenAccumulated.prompt.toLocaleString()} prompt + ${tokenAccumulated.completion.toLocaleString()} completion`;
       const modelLabel = settings.model ? esc(settings.model.split('/').pop() || settings.model) : '';
-      const usageSpan = `<span class="msg-footer-tokens" title="${esc(titleText)}">🧮 ${p.toLocaleString()}+${c.toLocaleString()}${costStr}</span>`;
+      const usageSpan = `<span class="msg-footer-tokens" title="${esc(titleText)}">🧮 ${p.toLocaleString()}+${c.toLocaleString()} · ${tokPerSec} tok/s${costStr}</span>`;
       footerEl.innerHTML = `${modelLabel ? `<span class="msg-footer-model">${modelLabel}</span>` : ''}${usageSpan}`;
     }
   }
@@ -6373,7 +6374,7 @@ function updateModelLabel() {
     }
   }
 }
-function updateSetupBanner() { setupBanner.classList.toggle('hidden', !!settings.apiKey); }
+function updateSetupBanner() { setupBanner.classList.toggle('hidden', !!settings.apiKey || settings.llmProvider === 'ollama'); }
 function refreshIcons() { (window as any).lucide?.createIcons(); }
 
 let sharedAudioContext: AudioContext | null = null;
@@ -6472,7 +6473,7 @@ function init() {
   // we wait for the result to populate the dropdowns.
   loadSecureApiKey().then(async () => {
     updateSetupBanner();
-    if (!settings.apiKey) return;
+    if (!settings.apiKey && settings.llmProvider !== 'ollama') return;
     if (settings.cachedModels.length === 0) {
       // First run — block briefly to populate the UI
       await refreshModelsInBackground();
@@ -7897,7 +7898,8 @@ function saveMcpServer() {
 }
 
 async function runReflection() {
-  if (!activeProject || !settings.apiKey || !settings.model) return;
+  if (!activeProject || !settings.model) return;
+  if (!settings.apiKey && settings.llmProvider !== 'ollama') return;
 
   const time = new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
   const bubble = document.createElement('div');

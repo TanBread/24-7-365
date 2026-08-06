@@ -529,6 +529,24 @@ ipcMain.handle('exec-command', async (_event, command: string, workspacePath: st
   });
 });
 
+// Create a git commit with the message passed as an argument array.
+// Uses execFile (no shell), so the message can never inject commands.
+ipcMain.handle('git-commit', async (_event, message: string, workspacePath: string) => {
+  return new Promise((resolve) => {
+    if (!workspacePath || !fs.existsSync(workspacePath)) {
+      resolve({ code: 1, stdout: '', stderr: 'Ошибка: Рабочая папка не выбрана или не существует.' });
+      return;
+    }
+    childProcess.execFile('git', ['commit', '-m', message], { cwd: workspacePath, timeout: 180000, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve({
+        code: error ? (error.code || 1) : 0,
+        stdout: stdout || '',
+        stderr: stderr || ''
+      });
+    });
+  });
+});
+
 // Execute shell command with LIVE streaming output to the renderer terminal panel
 // Execute shell command with LIVE streaming output to the renderer terminal panel
 ipcMain.handle('exec-command-stream', async (_event, command: string, workspacePath: string, execId: string) => {

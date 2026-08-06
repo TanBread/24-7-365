@@ -1,6 +1,6 @@
 {
   "name": "desktop-gui",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "7/24 IDE Desktop GUI",
   "main": "dist/main.js",
   "scripts": {
@@ -99,8 +99,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "strmax195-hue",
-        "repo": "7-24-IDE",
+        "owner": "TanBread",
+        "repo": "27-7-365",
         "releaseType": "release"
       }
     ]

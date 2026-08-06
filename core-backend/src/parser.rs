@@ -215,7 +215,7 @@ impl AstParser {
             let mut name_text: Option<String> = None;
 
             for cap in m.captures {
-                let cap_name = &query.capture_names()[cap.index as usize];
+                let cap_name = query.capture_names()[cap.index as usize];
                 if cap_name == "name" {
                     name_text = Some(node_text(cap.node, code).trim().to_string());
                 } else {
@@ -234,7 +234,10 @@ impl AstParser {
             let final_name = name_text.unwrap_or_else(|| {
                 let snippet = node_text(parent, code).trim();
                 if snippet.len() > 80 {
-                    format!("{}…", &snippet[..80])
+                    // Truncate by characters, not bytes — a byte slice can
+                    // land inside a multi-byte UTF-8 char and panic.
+                    let truncated: String = snippet.chars().take(80).collect();
+                    format!("{}…", truncated)
                 } else {
                     snippet.to_string()
                 }
