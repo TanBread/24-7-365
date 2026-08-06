@@ -6461,6 +6461,8 @@ function init() {
       if (settingsVer) settingsVer.textContent = `7/24 IDE v${v}`;
       const aboutVer = document.getElementById('about-version');
       if (aboutVer) aboutVer.textContent = `v${v}`;
+      const sidebarVer = document.getElementById('sidebar-version');
+      if (sidebarVer) sidebarVer.textContent = `v${v}`;
     }).catch(() => {});
   }
   

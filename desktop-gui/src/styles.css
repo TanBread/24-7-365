@@ -4158,6 +4158,18 @@ body.theme-dark .toggle-switch input:checked + .toggle-slider::before {
   height: 14px;
 }
 
+.sidebar-version-label {
+  font-size: 9px;
+  color: #7fff00;
+  opacity: 0.7;
+  white-space: nowrap;
+  line-height: 1;
+  display: block !important;
+  text-align: center;
+  margin-top: 2px;
+  align-self: center;
+}
+
 .sidebar-folder-mini {
   flex: 1;
   display: flex;
@@ -8890,7 +8902,7 @@ body.theme-dark .welcome-state {
     gap: 6px !important;
     align-items: stretch !important;
   }
-  .sidebar-footer span,
+  .sidebar-footer span:not(.sidebar-version-label),
   .sidebar-folder-path-clickable,
   .sidebar-workspace-details,
   .sidebar-folder-mini {
