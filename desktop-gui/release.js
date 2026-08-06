@@ -84,7 +84,11 @@ run(`git tag ${tag}`);
 
 // ─── 4. Push ─────────────────────────────────────────────────────────────────
 console.log('\n═══ Pushing to GitHub ═══');
-run('git push origin main --tags');
+run('git push origin main');
+try {
+  run(`git push origin :refs/tags/${tag}`);
+} catch (e) {}
+run(`git push origin ${tag}`);
 
 // ─── 5. Create GitHub Release ────────────────────────────────────────────────
 console.log('\n═══ Creating GitHub Release ═══');

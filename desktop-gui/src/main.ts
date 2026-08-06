@@ -1046,9 +1046,11 @@ function setupAutoUpdater() {
     console.log('[updater] dev build, auto-updater disabled');
     return;
   }
+  console.log('[updater] init, app is packaged');
   // Manual control: we want to notify the user before downloading
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.forceDevUpdateConfig = false;
 
   // Disable signature verification on Windows for self-signed or unsigned setups
   (autoUpdater as any).verifyUpdateCodeSignature = async () => {
@@ -1056,17 +1058,18 @@ function setupAutoUpdater() {
   };
 
   const send = (channel: string, payload: any) => {
+    console.log('[updater] send', channel, JSON.stringify(payload));
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(channel, payload);
     }
   };
 
-  autoUpdater.on('checking-for-update', () => send('updater-status', { type: 'checking' }));
-  autoUpdater.on('update-available', (info) => send('updater-status', { type: 'available', version: info.version, releaseNotes: info.releaseNotes }));
-  autoUpdater.on('update-not-available', () => send('updater-status', { type: 'none' }));
-  autoUpdater.on('error', (err) => send('updater-status', { type: 'error', message: err?.message || String(err) }));
+  autoUpdater.on('checking-for-update', () => { console.log('[updater] checking-for-update'); send('updater-status', { type: 'checking' }); });
+  autoUpdater.on('update-available', (info) => { console.log('[updater] update-available', info.version); send('updater-status', { type: 'available', version: info.version, releaseNotes: info.releaseNotes }); });
+  autoUpdater.on('update-not-available', () => { console.log('[updater] update-not-available'); send('updater-status', { type: 'none' }); });
+  autoUpdater.on('error', (err) => { console.error('[updater] error:', err); send('updater-status', { type: 'error', message: err?.message || String(err) }); });
   autoUpdater.on('download-progress', (p) => send('updater-status', { type: 'progress', percent: Math.round(p.percent || 0), bytesPerSecond: p.bytesPerSecond, transferred: p.transferred, total: p.total }));
-  autoUpdater.on('update-downloaded', (info) => send('updater-status', { type: 'downloaded', version: info.version }));
+  autoUpdater.on('update-downloaded', (info) => { console.log('[updater] update-downloaded', info.version); send('updater-status', { type: 'downloaded', version: info.version }); });
 
   // First check shortly after launch
   setTimeout(() => {
@@ -1080,9 +1083,12 @@ function setupAutoUpdater() {
 
 ipcMain.handle('updater-check', async () => {
   try {
+    console.log('[updater] manual check triggered');
     const r = await autoUpdater.checkForUpdates();
+    console.log('[updater] check result:', r?.updateInfo?.version || 'none');
     return r ? { ok: true, version: r.updateInfo.version } : { ok: false };
   } catch (err: any) {
+    console.error('[updater] check error:', err);
     return { ok: false, error: err?.message || String(err) };
   }
 });
