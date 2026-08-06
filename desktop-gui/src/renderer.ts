@@ -864,10 +864,11 @@ function populateModelSelect(models: ModelInfo[], selectedId?: string) {
     for (const m of groupModels) {
       const o = document.createElement('option');
       o.value = m.id;
-      const freeBadge = m.isFree ? ' [FREE]' : '';
+      const priceTag = m.isFree ? '[FREE]' : '[PAID]';
+      const catTag = m.category === 'coding' ? '[CODING]' : m.category === 'creative' ? '[CREATIVE]' : '[GENERAL]';
       const ctxInfo = m.contextLength ? ` · ${(m.contextLength / 1000).toFixed(0)}K` : '';
       const priceInfo = !m.isFree && m.priceCompletion > 0 ? ` · $${(m.priceCompletion * 1000000).toFixed(2)}/M` : '';
-      o.textContent = m.name + freeBadge + ctxInfo + priceInfo;
+      o.textContent = `${m.name} ${priceTag} ${catTag}${ctxInfo}${priceInfo}`;
       if (m.id === selectedId) o.selected = true;
       og.appendChild(o);
     }
