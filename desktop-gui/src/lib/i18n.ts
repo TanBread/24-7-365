@@ -345,6 +345,9 @@ const DICT: Record<string, [string, string]> = {
   'Загрузка моделей...': ['Loading models...', '正在加载模型...'],
   'Загружено моделей': ['Models loaded', '已加载模型'],
   'Модели не найдены': ['No models found', '未找到模型'],
+  'Кодинг': ['Coding', '编程'],
+  'Общие': ['General', '通用'],
+  'Креатив': ['Creative', '创意'],
   'Рабочая папка не выбрана. Нажмите «Открыть» в боковой панели.': ['No working folder selected. Click “Open” in the sidebar.', '未选择工作文件夹。点击侧边栏中的"打开"。'],
   'Папка пуста. Агент может создать файлы.': ['The folder is empty. The agent can create files.', '文件夹为空。智能体可以创建文件。'],
 
@@ -418,6 +421,9 @@ const DICT: Record<string, [string, string]> = {
   'Скачивание обновления': ['Downloading update', '正在下载更新'],
   'Обновление готово к установке': ['Update ready to install', '更新已准备好安装'],
   'Перезапустить и установить': ['Restart and install', '重启并安装'],
+  'Обновление загружено': ['Update downloaded', '更新已下载'],
+  'Перезапустите для установки': ['Restart to install', '重启以安装'],
+  'Перезапустить': ['Restart', '重启'],
 
   // ─── v1.2.2 Refinements ───
   'Остановить': ['Stop', '停止'],

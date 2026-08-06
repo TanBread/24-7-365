@@ -1047,8 +1047,8 @@ function setupAutoUpdater() {
     return;
   }
   console.log('[updater] init, app is packaged');
-  // Manual control: we want to notify the user before downloading
-  autoUpdater.autoDownload = false;
+  // Auto-download in background, auto-install on quit
+  autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.forceDevUpdateConfig = false;
 

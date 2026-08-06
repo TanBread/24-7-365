@@ -316,14 +316,19 @@ async function fetchModels(providerOrKey?: string, url?: string, key?: string): 
       const resp = await fetch(`${base}/api/tags`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      const result = (data.models || []).map((m: any) => ({
-        id: m.name,
-        name: m.name,
-        contextLength: 4096,
-        isFree: true,
-        pricePrompt: 0,
-        priceCompletion: 0,
-      }));
+      const result: ModelInfo[] = (data.models || []).map((m: any) => {
+        const model: ModelInfo = {
+          id: m.name,
+          name: m.name,
+          contextLength: 4096,
+          isFree: true,
+          pricePrompt: 0,
+          priceCompletion: 0,
+        };
+        model.category = classifyModel(model);
+        return model;
+      });
+      result.sort((a: any, b: any) => a.name.localeCompare(b.name));
       if (modelsStatus) {
         const updatedAt = new Date().toLocaleTimeString();
         modelsStatus.textContent = `${t('Загружено моделей')}: ${result.length} · ${t('обновлено')} ${updatedAt}`;
@@ -370,8 +375,14 @@ async function fetchModels(providerOrKey?: string, url?: string, key?: string): 
       const addModels = (providers: string[]) => {
         for (const prov of providers) {
           const models = byProvider[prov] || [];
-          const limited = models.slice(0, 25);
-          for (const m of limited) {
+          // Sort: free first, then by name
+          models.sort((a: any, b: any) => {
+            const aFree = parseFloat(a.pricing?.completion || '0') === 0 && parseFloat(a.pricing?.prompt || '0') === 0;
+            const bFree = parseFloat(b.pricing?.completion || '0') === 0 && parseFloat(b.pricing?.prompt || '0') === 0;
+            if (aFree !== bFree) return aFree ? -1 : 1;
+            return (a.name || a.id).localeCompare(b.name || b.id);
+          });
+          for (const m of models) {
             if (added.has(m.id)) continue;
             added.add(m.id);
             result.push({
@@ -390,6 +401,11 @@ async function fetchModels(providerOrKey?: string, url?: string, key?: string): 
 
       const remaining = Object.keys(byProvider).filter(p => !priorityProviders.includes(p)).sort();
       addModels(remaining);
+
+      // Classify each model
+      for (const m of result) {
+        m.category = classifyModel(m);
+      }
 
       if (modelsStatus) {
         const updatedAt = new Date().toLocaleTimeString();
@@ -704,6 +720,29 @@ interface ModelInfo {
   isFree: boolean;
   pricePrompt?: number;      // $ per token (input)
   priceCompletion?: number;  // $ per token (output)
+  category?: 'coding' | 'general' | 'creative';
+}
+
+// ─── Model classification ────────────────────────────────────────────────────
+const CODING_PATTERNS = [
+  'code', 'coder', 'codex', 'codestral', 'phind', 'starcode',
+  'deepseek', 'qwen', 'starcoder', 'wizard', 'granite-code',
+];
+const CREATIVE_PATTERNS = [
+  'creative', 'story', 'poet', 'lyr', 'song', 'imag', 'art',
+  'dall-e', 'midjourney', 'stable-diffusion', 'flux', 'ideogram',
+];
+
+function classifyModel(model: ModelInfo): 'coding' | 'general' | 'creative' {
+  const combined = (model.id + ' ' + model.name).toLowerCase();
+  for (const pat of CODING_PATTERNS) {
+    if (combined.includes(pat)) return 'coding';
+  }
+  for (const pat of CREATIVE_PATTERNS) {
+    if (combined.includes(pat)) return 'creative';
+  }
+  // Everything else (GPT-4, Claude, Gemini, Llama, Mistral, etc.) → general
+  return 'general';
 }
 
 
@@ -790,41 +829,51 @@ function populateModelSelect(models: ModelInfo[], selectedId?: string) {
         (el as any).style.display = match ? '' : 'none';
       });
       groups.forEach(g => {
-        const visibleOpts = g.querySelectorAll('option[style*="display: none"], option:not([style])');
         const allHidden = Array.from(g.querySelectorAll('option')).every(o => (o as any).style.display === 'none');
         (g as HTMLElement).style.display = allHidden ? 'none' : '';
       });
     });
   }
 
-  // Add provider header at the top
-  const providerHeader = document.createElement('option');
-  providerHeader.disabled = true;
-  providerHeader.textContent = `=== ${t('Провайдер:')} ${settings.llmProvider === 'openrouter' ? 'OpenRouter' : 'Ollama'} ===`;
-  modelSelect.appendChild(providerHeader);
+  // Group by category: coding → general → creative
+  const categoryOrder: Array<{ key: string; label: string; icon: string }> = [
+    { key: 'coding', label: t('Кодинг'), icon: '</>' },
+    { key: 'general', label: t('Общие'), icon: '◆' },
+    { key: 'creative', label: t('Креатив'), icon: '~' },
+  ];
 
-  // Group by provider
-  const groups: Record<string, ModelInfo[]> = {};
+  const byCategory: Record<string, ModelInfo[]> = { coding: [], general: [], creative: [] };
   for (const m of models) {
-    const p = m.id.split('/')[0] || 'other';
-    if (!groups[p]) groups[p] = [];
-    groups[p].push(m);
+    const cat = m.category || 'general';
+    byCategory[cat].push(m);
   }
 
-  for (const [provider, gm] of Object.entries(groups)) {
+  for (const { key, label, icon } of categoryOrder) {
+    const groupModels = byCategory[key];
+    if (!groupModels.length) continue;
+
     const og = document.createElement('optgroup');
-    og.label = provider.charAt(0).toUpperCase() + provider.slice(1) + ` (${gm.length})`;
-    for (const m of gm) {
+    og.label = `${icon} ${label} (${groupModels.length})`;
+
+    // Sort: free first, then alphabetically
+    groupModels.sort((a, b) => {
+      if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    for (const m of groupModels) {
       const o = document.createElement('option');
       o.value = m.id;
       const freeBadge = m.isFree ? ' [FREE]' : '';
       const ctxInfo = m.contextLength ? ` · ${(m.contextLength / 1000).toFixed(0)}K` : '';
-      o.textContent = m.name + freeBadge + ctxInfo;
+      const priceInfo = !m.isFree && m.priceCompletion > 0 ? ` · $${(m.priceCompletion * 1000000).toFixed(2)}/M` : '';
+      o.textContent = m.name + freeBadge + ctxInfo + priceInfo;
       if (m.id === selectedId) o.selected = true;
       og.appendChild(o);
     }
     modelSelect.appendChild(og);
   }
+
   if (!selectedId && models.length) modelSelect.value = models[0].id;
 
   // If cached settings model is not in the list, update it
@@ -1615,24 +1664,15 @@ function setupAutoUpdaterUI() {
   window.electronAPI.onUpdaterStatus((data: any) => {
     if (!data) return;
     if (data.type === 'available') {
-      setHTML(`
-        <i data-lucide="arrow-down-circle"></i>
-        <span class="updater-text">${esc(t('Доступно обновление'))}: <b>${esc(data.version)}</b></span>
-        <button class="primary-btn updater-btn" id="updater-download-btn">${esc(t('Скачать'))}</button>
-        <button class="ghost-btn updater-btn" id="updater-dismiss-btn"><i data-lucide="x"></i></button>
-      `);
-      banner?.querySelector('#updater-download-btn')?.addEventListener('click', async () => {
-        setHTML(`<i data-lucide="loader-2" class="spin"></i><span class="updater-text">${esc(t('Скачивание обновления...'))}</span>`);
-        await window.electronAPI.updaterDownload();
-      });
-      banner?.querySelector('#updater-dismiss-btn')?.addEventListener('click', close);
+      // Auto-downloading — just log, no banner needed yet
+      console.log('[updater] downloading v' + data.version + ' in background...');
     } else if (data.type === 'progress') {
-      setHTML(`<i data-lucide="loader-2" class="spin"></i><span class="updater-text">${esc(t('Скачивание обновления'))}: ${data.percent}%</span>`);
+      // Silent — downloading in background
     } else if (data.type === 'downloaded') {
       setHTML(`
         <i data-lucide="check-circle-2"></i>
-        <span class="updater-text">${esc(t('Обновление готово к установке'))}: <b>${esc(data.version)}</b></span>
-        <button class="primary-btn updater-btn" id="updater-install-btn">${esc(t('Перезапустить и установить'))}</button>
+        <span class="updater-text">${esc(t('Обновление загружено'))}: <b>${esc(data.version)}</b>. ${esc(t('Перезапустите для установки'))}</span>
+        <button class="primary-btn updater-btn" id="updater-install-btn">${esc(t('Перезапустить'))}</button>
         <button class="ghost-btn updater-btn" id="updater-dismiss-btn"><i data-lucide="x"></i></button>
       `);
       banner?.querySelector('#updater-install-btn')?.addEventListener('click', () => window.electronAPI.updaterInstall());
@@ -1650,7 +1690,7 @@ function setupAutoUpdaterUI() {
       `);
       banner?.querySelector('#updater-dismiss-btn')?.addEventListener('click', close);
     }
-    // 'checking' / 'none' — silent
+    // 'checking' / 'none' / 'available' / 'progress' — silent
   });
 }
 
