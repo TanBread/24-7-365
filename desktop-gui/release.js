@@ -92,11 +92,11 @@ async function createRelease() {
   try {
     run(`gh release create ${tag} "${exePath}" --title "${tag}" --notes "7/24 IDE ${version}" --latest`);
     console.log(`\n✅ Release ${tag} published!`);
-    console.log(`   https://github.com/TanBread/27-7-365/releases/tag/${tag}`);
+    console.log(`   https://github.com/TanBread/24-7-365/releases/tag/${tag}`);
   } catch (e) {
     console.error('Failed to create release via gh CLI. Make sure `gh` is authenticated.');
     console.error('You can create the release manually at:');
-    console.error(`  https://github.com/TanBread/27-7-365/releases/new`);
+    console.error(`  https://github.com/TanBread/24-7-365/releases/new`);
     console.error(`Upload: ${exePath}`);
     process.exit(1);
   }
