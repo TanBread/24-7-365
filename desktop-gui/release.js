@@ -41,27 +41,33 @@ if (newVersion) {
 
 const version = pkg.version;
 const tag = `v${version}`;
-const exeName = `7-24-IDE-Portable-${version}.exe`;
-const exePath = path.join(__dirname, '..', 'dist-installer', exeName);
+const nsisName = `7-24-IDE-Setup-${version}.exe`;
+const nsisPath = path.join(__dirname, '..', 'dist-installer', nsisName);
+const latestYmlPath = path.join(__dirname, '..', 'dist-installer', 'latest.yml');
 
 function run(cmd) {
   console.log(`> ${cmd}`);
-  execSync(cmd, { stdio: 'inherit', cwd: __dirname });
+  execSync(cmd, { stdio: 'inherit', cwd: __dirname, shell: 'powershell.exe' });
 }
 
 // ─── 1. Build ────────────────────────────────────────────────────────────────
 console.log('\n═══ Building app ═══');
 run('node build.js');
 
-// ─── 2. Build portable exe ───────────────────────────────────────────────────
-console.log('\n═══ Building portable exe ═══');
-run(`$env:CSC_IDENTITY_AUTO_DISCOVERY="false"; npx electron-builder --win portable --config.win.signAndEditExecutable=false`);
+// ─── 2. Build NSIS installer ─────────────────────────────────────────────────
+console.log('\n═══ Building NSIS installer ═══');
+run(`$env:CSC_IDENTITY_AUTO_DISCOVERY="false"; npx electron-builder --win nsis --config.win.signAndEditExecutable=false`);
 
-if (!fs.existsSync(exePath)) {
-  console.error(`Portable exe not found at ${exePath}`);
+if (!fs.existsSync(nsisPath)) {
+  console.error(`NSIS installer not found at ${nsisPath}`);
   process.exit(1);
 }
-console.log(`✓ Portable exe: ${exePath} (${(fs.statSync(exePath).size / 1024 / 1024).toFixed(1)} MB)`);
+if (!fs.existsSync(latestYmlPath)) {
+  console.error(`latest.yml not found at ${latestYmlPath} (needed by auto-updater)`);
+  process.exit(1);
+}
+console.log(`✓ NSIS installer: ${nsisName} (${(fs.statSync(nsisPath).size / 1024 / 1024).toFixed(1)} MB)`);
+console.log(`✓ latest.yml found`);
 
 // ─── 3. Git operations ───────────────────────────────────────────────────────
 console.log('\n═══ Git commit & tag ═══');
@@ -90,14 +96,14 @@ async function createRelease() {
   } catch (e) {}
 
   try {
-    run(`gh release create ${tag} "${exePath}" --title "${tag}" --notes "7/24 IDE ${version}" --latest`);
+    run(`gh release create ${tag} "${nsisPath}" "${latestYmlPath}" --title "${tag}" --notes "7/24 IDE ${version}" --latest`);
     console.log(`\n✅ Release ${tag} published!`);
     console.log(`   https://github.com/TanBread/24-7-365/releases/tag/${tag}`);
   } catch (e) {
     console.error('Failed to create release via gh CLI. Make sure `gh` is authenticated.');
     console.error('You can create the release manually at:');
     console.error(`  https://github.com/TanBread/24-7-365/releases/new`);
-    console.error(`Upload: ${exePath}`);
+    console.error(`Upload: ${nsisPath} and ${latestYmlPath}`);
     process.exit(1);
   }
 }

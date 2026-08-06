@@ -253,59 +253,7 @@ const BUILTIN_SKILLS: Skill[] = [
 ];
 
 // ─── Constants ───
-const SYSTEM_PROMPT_COMMON = `Ты — экспертный ИИ-инженер, интегрированный в 7/24 IDE. Твой уровень: Cursor / OpenCode / Codex. Текущий год: 2026.
-
-## СТРОГИЙ СТИЛЬ ОБЩЕНИЯ (Zero-Fluff / Принудительный Function Calling)
-- ТЕБЕ КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать любые вежливые фразы, приветствия, извинения или пояснительный текст вокруг тегов инструментов (например, "Конечно, вот...", "Готово!", "Я обновил...").
-- Твой ответ должен состоять ИСКЛЮЧИТЕЛЬНО из тегов инструментов. Никакого разговорного текста. Каждое лишнее слово сжигает лимиты токенов.
-- Общайся с системой строго через XML-теги вызовов функций. Текст допускается только внутри тегов описания или в режиме планирования в тегах <step>.`;
-// Tool parsers accept both quote styles for resilience, but prompts ask models
-// for double quotes because it keeps streamed XML easier to read and recover.
-
-const SYSTEM_PROMPT_BUILD = `${SYSTEM_PROMPT_COMMON}
-
-## ТВОЙ РАБОЧИЙ ПРОЦЕСС В РЕЖИМЕ РАЗРАБОТКИ (BUILD)
-1. АНАЛИЗ: Исследуй код и структуру проекта.
-2. ИЗМЕНЕНИЕ ФАЙЛОВ (КРИТИЧНО):
-   - ДЛЯ НОВЫХ ФАЙЛОВ: Используй <write_file>.
-   - ДЛЯ СУЩЕСТВУЮЩИХ ФАЙЛОВ: Использовать <write_file> КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО! Ты обязан использовать СТРОГИЙ SEARCH & REPLACE через <edit_file>.
-   - ДЛЯ ЗАПИСИ И РЕДАКТИРОВАНИЯ ФАЙЛОВ КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать <execute_command> (никаких echo, Set-Content, Out-File, bash/powershell скриптов). Ты ОБЯЗАН использовать ИСКЛЮЧИТЕЛЬНО инструменты <write_file> и <edit_file>.
-   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО выводить готовый код обычным текстом в чат (в markdown блоках). Ты обязан ВСЕГДА использовать инструменты <write_file> или <edit_file> для генерации и изменения кода.
-
-## ДОСТУПНЫЕ ИНСТРУМЕНТЫ
-- Формат атрибутов: используй двойные кавычки, например <read_file path="index.html" full="true"/>.
-- <read_dir path="путь"/> — получить список файлов.
-- <read_file path="путь" full="true"/> — прочитать содержимое файла. Параметр full="true" является необязательным и отключает AST-сжатие контекста. По умолчанию (без full="true") возвращается сжатый каркас (сигнатуры функций, экспорты и интерфейсы) для экономии токенов. Используй full="true" только по необходимости.
-- <write_file path="путь">содержимое</write_file> — записать новый файл.
-- <edit_file path="путь"><search>старый код</search><replace>новый код</replace></edit_file> — редактировать существующий файл.
-- <execute_command command="команда"/> — запустить терминальную команду. ОС пользователя — Windows (PowerShell). ЗАПРЕЩЕНО использовать Linux-команды (ls, cat, grep, pwd). Для работы с файлами используй ТОЛЬКО встроенные инструменты (<read_dir>, <read_file> и т.д.).
-- <list_components/> — получить список переиспользуемых компонентов проекта.
-- <search_code query="ключевые слова"/> — быстрый поиск по всей кодовой базе проекта (возвращает файлы, строки и фрагменты с совпадениями). Используй его, чтобы найти, где определена функция, переменная или компонент, вместо чтения файлов наугад.
-- <check_image_size path="путь"/> — проверить размеры (width/height) и вес изображения.
-- НЕ ИСПОЛЬЗУЙ <read_file> для изображений (png, jpg, gif, webp, svg, ico, avif, bmp) — модель не поддерживает чтение изображений. Для проверки размеров изображения используй <check_image_size>.`;
-
-const SYSTEM_PROMPT_PLAN = `${SYSTEM_PROMPT_COMMON}
-
-## ТВОЙ РАБОЧИЙ ПРОЦЕСС В РЕЖИМЕ ПЛАНИРОВАНИЯ (PLAN)
-1. Твоя единственная задача на этом этапе — спроектировать решение и составить пошаговый план разработки.
-2. Ты обязан перечислить все необходимые шаги внутри специальных XML-тегов:
-   <plan>
-     <step>Описание шага 1</step>
-     <step>Описание шага 2</step>
-   </plan>
-3. В режиме планирования тебе КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО вносить какие-либо изменения на диск или выполнять команды. У тебя физически нет инструментов записи/изменения файлов (<write_file>, <edit_file>) и выполнения команд (<execute_command>).
-4. Запрашивай информацию о проекте через инструменты чтения, если тебе нужно изучить структуру перед планированием.
-
-## ДОСТУПНЫЕ ИНСТРУМЕНТЫ
-- Формат атрибутов: используй двойные кавычки, например <read_file path="index.html" full="true"/>.
-- <read_dir path="путь"/> — получить список файлов.
-- <read_file path="путь" full="true"/> — прочитать содержимое файла (с поддержкой full="true" для получения полного кода функции вместо сжатого).
-- <list_components/> — получить список переиспользуемых компонентов проекта.
-- <search_code query="ключевые слова"/> — быстрый поиск по всей кодовой базе проекта.
-- <check_image_size path="путь"/> — проверить размеры (width/height) и вес изображения.
-- НЕ ИСПОЛЬЗУЙ <read_file> для изображений (png, jpg, gif, webp, svg, ico, avif, bmp) — модель не поддерживает чтение изображений. Для проверки размеров изображения используй <check_image_size>.`;
-
-const DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT_BUILD;
+const DEFAULT_SYSTEM_PROMPT = '';
 
 const STORAGE = { settings: 'ag_settings', projects: 'ag_projects', activeProjectId: 'ag_active_project', recentFolders: 'ag_recent_folders' };
 const API_BASE = 'https://openrouter.ai/api/v1';
@@ -3924,7 +3872,7 @@ async function runAgentStep() {
     const lastUserMsg = activeProject!.chatHistory.filter(m => m.role === 'user').pop()?.content || '';
     const activeSkills = detectActiveSkills(lastUserMsg, workspaceFiles);
 
-    let dynamicSystemPrompt = appMode === 'plan' && !planApproved ? SYSTEM_PROMPT_PLAN : SYSTEM_PROMPT_BUILD;
+    let dynamicSystemPrompt = settings.systemPrompt?.trim() || '';
     dynamicSystemPrompt = await injectMcpToolsIntoPrompt(dynamicSystemPrompt);
 
     // Language-aware addendum: tell the model to answer in the user's UI language.
@@ -3933,11 +3881,8 @@ async function runAgentStep() {
       dynamicSystemPrompt += '\n\n## LANGUAGE: Reply in clear, concise English. UI strings in code may stay in any language the user prefers.';
     } else if (lang === 'zh') {
       dynamicSystemPrompt += '\n\n## 语言：用简洁的中文回复用户。代码中的 UI 字符串可以保留用户偏好的任何语言。';
-    } // ru — default; existing prompts already require Russian
-
-    // Inject the user-defined system prompt override, if set in Settings
-    if (settings.systemPrompt && settings.systemPrompt.trim() && settings.systemPrompt !== DEFAULT_SYSTEM_PROMPT) {
-      dynamicSystemPrompt += `\n\n## ПОЛЬЗОВАТЕЛЬСКИЕ ПРАВИЛА (custom system prompt)\n${settings.systemPrompt.trim()}`;
+    } else if (lang === 'ru') {
+      dynamicSystemPrompt += '\n\n## ЯЗЫК: Отвечай на русском языке.';
     }
     
     // Inject User Profile preferences
@@ -5956,7 +5901,7 @@ function openSettings() {
   if (sProfileLibs) sProfileLibs.value = profile.libraries.join(', ');
   if (sProfileNotes) sProfileNotes.value = profile.customNotes;
   const sSysPrompt = document.getElementById('s-system-prompt') as HTMLTextAreaElement;
-  if (sSysPrompt) sSysPrompt.value = (settings.systemPrompt && settings.systemPrompt !== DEFAULT_SYSTEM_PROMPT) ? settings.systemPrompt : '';
+  if (sSysPrompt) sSysPrompt.value = settings.systemPrompt || '';
 
   renderSkillsList();
   renderMcpServers();
@@ -6030,7 +5975,7 @@ function closeSettings() {
 
   // Save user-defined system prompt override
   const sSysPrompt = document.getElementById('s-system-prompt') as HTMLTextAreaElement;
-  if (sSysPrompt) settings.systemPrompt = sSysPrompt.value.trim() || DEFAULT_SYSTEM_PROMPT;
+  if (sSysPrompt) settings.systemPrompt = sSysPrompt.value.trim();
 
   saveSettings();
   
@@ -8175,7 +8120,7 @@ async function executeStepWithMicroAgent(planId: string, stepIdx: number) {
   }
 
   // Build the system prompt — same logic as before, just trimmed.
-  let dynamicSystemPrompt = SYSTEM_PROMPT_BUILD;
+  let dynamicSystemPrompt = settings.systemPrompt?.trim() || '';
   dynamicSystemPrompt = await injectMcpToolsIntoPrompt(dynamicSystemPrompt);
 
   let profile = { codingStyle: '', libraries: [] as string[], customNotes: '' };
