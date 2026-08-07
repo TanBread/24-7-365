@@ -32,7 +32,7 @@ export class McpClient {
         const runEnv = { ...process.env, ...(this.env || {}) };
         this.child = childProcess.spawn(this.command, this.args, {
           env: runEnv,
-          shell: true, // crucial for command resolution on Windows
+          shell: false,
           windowsHide: true,
         });
 

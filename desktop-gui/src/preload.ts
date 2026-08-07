@@ -22,10 +22,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App version (for the Settings/About labels)
   getAppVersion: () => ipcRenderer.invoke('get-app-version') as Promise<string>,
 
-  // Server-side sandbox preference
-  setSandboxEnabled: (enabled: boolean) =>
-    ipcRenderer.invoke('set-sandbox-enabled', enabled) as Promise<boolean>,
-
   // Server-side language preference
   setLanguage: (lang: string) =>
     ipcRenderer.invoke('set-language', lang) as Promise<boolean>,

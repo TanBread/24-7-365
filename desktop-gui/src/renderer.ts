@@ -44,7 +44,6 @@ declare global {
       mergeShadowWorkspace: (workspacePath: string) => Promise<boolean>;
       discardShadowWorkspace: (workspacePath: string) => Promise<boolean>;
       showConfirm: (message: string, title?: string, lang?: string) => Promise<boolean>;
-      setSandboxEnabled: (enabled: boolean) => Promise<boolean>;
       setLanguage: (lang: string) => Promise<boolean>;
       setMinimizeToTray: (enabled: boolean) => Promise<boolean>;
       showNotification: (title: string, body: string) => Promise<boolean>;
@@ -582,10 +581,6 @@ function saveSettings() {
   // Fire-and-forget secure save of the key
   if (window.electronAPI?.secureKeySet) {
     window.electronAPI.secureKeySet(apiKey || '').catch(() => {});
-  }
-  // Sync sandbox preference to the main process (server-side enforcement).
-  if (window.electronAPI?.setSandboxEnabled) {
-    window.electronAPI.setSandboxEnabled(settings.sandboxEnabled).catch(() => {});
   }
   // Sync language to the main process.
   if (window.electronAPI?.setLanguage) {
@@ -4767,10 +4762,16 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
   if (tool.type === 'execute_command') {
     const cmdLower = (tool.params.command || '').toLowerCase();
-    const isTryingToWriteFile = cmdLower.includes('set-content') || cmdLower.includes('out-file') || cmdLower.includes('echo') || cmdLower.includes('>') || cmdLower.startsWith('write ') || cmdLower.includes('curl ') || cmdLower.includes('wget ');
+    const blocked = /\b(curl|wget|certutil|bitsadmin|mshta|Invoke-WebRequest|Invoke-RestMethod|Net\.WebClient|iwr|irm)\b/i
+      .test(cmdLower)
+      || /\b(DownloadString|DownloadFile|Invoke-Expression|IEX)\b/i.test(cmdLower)
+      || /(-EncodedCommand|\s-enc\s)/i.test(cmdLower)
+      || /\b(nc|ncat|netcat)\s+.*-l/i.test(cmdLower)
+      || /\b(echo|set-content|out-file|add-content|sc|so)\b.*\b>/i.test(cmdLower)
+      || /\b(echo|set-content|out-file|add-content)\b.*[A-Z]:\\/i.test(cmdLower);
     
-    if (isTryingToWriteFile) {
-      return t('ОШИБКА КРИТИЧЕСКОГО УРОВНЯ: Использование execute_command для записи/создания/изменения файлов или скачивания кода СТРОГО ЗАПРЕЩЕНО! Вы ОБЯЗАНЫ использовать инструменты <write_file> (для новых) или <edit_file> (для существующих). Не пытайтесь обойти это правило.');
+    if (blocked) {
+      return t('ОШИБКА КРИТИЧЕСКОГО УРОВНЯ: Использование execute_command для скачивания файлов, сетевых запросов или записи/создания файлов СТРОГО ЗАПРЕЩЕНО! Вы ОБЯЗАНЫ использовать инструменты <write_file> (для новых) или <edit_file> (для существующих).');
     }
     if (settings.permExec === 'deny') {
       return t('ОШИБКА: Выполнение команд терминала запрещено настройками. Скажите пользователю: «В настройках (кнопка ⚙️ внизу) → раздел «Разрешения», измените «Запуск терминальных команд» на «Спрашивать перед запуском».»');
@@ -6457,10 +6458,6 @@ function playNotificationSound() {
 // ═══════════════════════════════════════════
 function init() {
   loadSettings(); 
-  // Sync sandbox preference to the main process on startup.
-  if (window.electronAPI?.setSandboxEnabled) {
-    window.electronAPI.setSandboxEnabled(settings.sandboxEnabled).catch(() => {});
-  }
   // Sync language to the main process on startup.
   if (window.electronAPI?.setLanguage) {
     window.electronAPI.setLanguage(settings.language || 'ru').catch(() => {});

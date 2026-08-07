@@ -36,9 +36,33 @@ let activeMcpClients: Map<string, McpClient> = new Map();
 // Server-side sandbox preference (renderer sends this; main process enforces it).
 let serverSandboxEnabled = true;
 
+// ─── Sensitive file patterns — block LLM read access ─────────────────────────
+const SENSITIVE_FILE_RE = /(^|[\/\\])(\.env(\..+)?|\.env|\.env\.local|\.env\.production|\.env\.development|id_rsa|id_ed25519|id_dsa|id_ecdsa|\.pem|\.key|\.p12|\.pfx|\.git-credentials|\.netrc|\.npmrc|credentials\.json|service-account.*\.json)$/i;
+
 // ─── Command safety ─────────────────────────────────────────────────────────
-// Block dangerous commands that could destroy data outside the workspace.
-const DANGEROUS_CMD_RE = /\b(format|shutdown|reboot|del\s+\/[sSqQ]|rmdir\s+\/[sS]|rd\s+\/[sS]|rm\s+-rf\s*\/|rm\s+-rf\s+\/|Remove-Item\s+-Recurse\s+-Force\s+[A-Z]:|Set-Content\s+[A-Z]:\\|Out-File\s+[A-Z]:\\)\b|^\s*(del|erase|rmdir|rd|rm)\s+[A-Z]:\\/i;
+// Block dangerous commands: destructive operations, exfiltration, and shell injection.
+const DANGEROUS_CMD_RE = new RegExp([
+  // Destructive filesystem operations
+  '\\b(format|shutdown|reboot)',
+  '|\\b(del|erase)\\s+\\/[sSqQf]',
+  '|\\b(rmdir|rd)\\s+\\/[sS]',
+  '|\\brm\\s+-rf\\s*[\\/]',
+  '|\\bRemove-Item\\s+(-Recurse|-Force)',
+  // Data exfiltration — network commands
+  '|\\b(curl|wget|certutil|bitsadmin|mshta)\\b',
+  '|\\b(Invoke-WebRequest|Invoke-RestMethod|Net\\.WebClient)\\b',
+  '|\\biwr\\b|\\birm\\b',
+  // PowerShell download cradles
+  '|\\bDownloadString|DownloadFile|DownloadData\\b',
+  '|\\bInvoke-Expression|\\bIEX\\b',
+  // Encoded / obfuscated commands
+  '|-EncodedCommand|\\s-enc\\s',
+  // Reverse shells / listeners
+  '|\\b(nc|ncat|netcat)\\s+.*-l',
+  '|\\bpowershell\\s+.*(-nop|-w hidden|-enc)',
+  // Write to arbitrary paths outside workspace
+  '|^\\s*(echo|sc|so|Add-Content|Set-Content|Out-File)\\s+[A-Z]:\\\\',
+].join(''), 'i');
 
 function isDangerousCommand(command: string): boolean {
   return DANGEROUS_CMD_RE.test(command);
@@ -401,6 +425,11 @@ ipcMain.handle('read-file', async (_event, filePath: string, workspacePath: stri
     throw new Error(`Access Denied: Path is outside the sandbox: ${resolvedPath}`);
   }
 
+  // Block reads of sensitive files (.env, SSH keys, credentials)
+  if (SENSITIVE_FILE_RE.test(resolvedPath)) {
+    throw new Error(`Access Denied: Reading sensitive file is not allowed: ${path.basename(resolvedPath)}`);
+  }
+
   return await fs.promises.readFile(resolvedPath, 'utf-8');
 });
 
@@ -445,11 +474,8 @@ ipcMain.handle('get-app-version', () => {
   try { return app.getVersion(); } catch { return ''; }
 });
 
-// Server-side sandbox preference — renderer syncs this on settings change.
-ipcMain.handle('set-sandbox-enabled', (_event, enabled: boolean) => {
-  serverSandboxEnabled = !!enabled;
-  return true;
-});
+// Server-side sandbox is always enabled — cannot be disabled by the renderer.
+// This prevents prompt injection attacks from bypassing file system restrictions.
 
 // Server-side language preference — renderer syncs this on settings change.
 ipcMain.handle('set-language', (_event, lang: string) => {
