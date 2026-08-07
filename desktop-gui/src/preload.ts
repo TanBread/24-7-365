@@ -71,6 +71,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('updater-status', listener);
   },
 
+  onStartupTime: (callback: (ms: number) => void) => {
+    const listener = (_e: any, ms: number) => callback(ms);
+    ipcRenderer.on('startup-time', listener);
+    return () => ipcRenderer.removeListener('startup-time', listener);
+  },
+
+  // Time since main process started (for measuring real startup)
+  getBootTime: () => ipcRenderer.invoke('get-boot-time') as Promise<number>,
+
   // Open folder path in system file manager
   openInExplorer: (folderPath: string) =>
     ipcRenderer.invoke('open-in-explorer', folderPath),

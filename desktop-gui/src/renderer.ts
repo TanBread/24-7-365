@@ -488,6 +488,9 @@ let lastPreviewContent = '';
 let buildSessionWroteFiles = false;
 let agentStepCount = 0;
 const MAX_AGENT_STEPS = 20;
+const COMMAND_TIMEOUT_MS = 180_000;
+const MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+const MODEL_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 let activeAbortController: AbortController | null = null;
 let activeCommandExecId: string | null = null;
 let stdinHistory: string[] = [];
@@ -6458,7 +6461,6 @@ function playNotificationSound() {
 // INIT
 // ═══════════════════════════════════════════
 function init() {
-  console.time('IDE startup');
   loadSettings(); 
   // Sync language to the main process on startup.
   if (window.electronAPI?.setLanguage) {
@@ -6536,7 +6538,7 @@ function init() {
     }
     // Periodic refresh: every 6 hours while the app is open
     if (modelRefreshInterval) clearInterval(modelRefreshInterval);
-    modelRefreshInterval = setInterval(refreshModelsInBackground, 6 * 60 * 60 * 1000);
+    modelRefreshInterval = setInterval(refreshModelsInBackground, MODEL_REFRESH_INTERVAL_MS);
   });
 
   // Mode toggles
@@ -7677,7 +7679,10 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
   };
   document.addEventListener('click', initAudio, true);
   document.addEventListener('keydown', initAudio, true);
-  console.timeEnd('IDE startup');
+
+  window.electronAPI?.getBootTime?.().then(ms => {
+    console.log(`[IDE] Startup: ${ms}ms (Electron boot → init complete)`);
+  });
 }
 
 // ═══════════════════════════════════════════

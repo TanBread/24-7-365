@@ -6,6 +6,10 @@ import * as childProcess from 'child_process';
 import { McpClient } from './lib/mcp';
 import { CoreEngineClient, findCoreBinary } from './lib/coreEngine';
 
+const IDE_BOOT_START = Date.now();
+const COMMAND_TIMEOUT_MS = 180_000;
+const MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+
 // ─── Main-process i18n ──────────────────────────────────────────────────────
 // Lightweight mirror of the renderer i18n dictionary for strings that live in
 // the main process (tray menu, native dialogs, terminal status messages).
@@ -483,6 +487,7 @@ ipcMain.handle('set-language', (_event, lang: string) => {
   if (lang === 'en' || lang === 'zh' || lang === 'ru') mainLang = lang;
   return true;
 });
+ipcMain.handle('get-boot-time', () => Date.now() - IDE_BOOT_START);
 ipcMain.handle('delete-file', async (_event, filePath: string, workspacePath: string) => {
   try {
     const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(workspacePath, filePath);
@@ -610,7 +615,7 @@ ipcMain.handle('exec-command', async (_event, command: string, workspacePath: st
       return;
     }
 
-    childProcess.exec(command, { cwd: workspacePath, timeout: 180000, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
+    childProcess.exec(command, { cwd: workspacePath, timeout: COMMAND_TIMEOUT_MS, maxBuffer: MAX_BUFFER_BYTES }, (error, stdout, stderr) => {
       resolve({
         code: error ? (error.code || 1) : 0,
         stdout: stdout || '',
@@ -628,7 +633,7 @@ ipcMain.handle('git-commit', async (_event, message: string, workspacePath: stri
       resolve({ code: 1, stdout: '', stderr: mt('Ошибка: Рабочая папка не выбрана или не существует.') });
       return;
     }
-    childProcess.execFile('git', ['commit', '-m', message], { cwd: workspacePath, timeout: 180000, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
+    childProcess.execFile('git', ['commit', '-m', message], { cwd: workspacePath, timeout: COMMAND_TIMEOUT_MS, maxBuffer: MAX_BUFFER_BYTES }, (error, stdout, stderr) => {
       resolve({
         code: error ? (error.code || 1) : 0,
         stdout: stdout || '',
@@ -684,7 +689,7 @@ ipcMain.handle('exec-command-stream', async (_event, command: string, workspaceP
         } catch {}
         // The 'close' handler below will resolve the promise and clean up.
       }
-    }, 180000);
+    }, COMMAND_TIMEOUT_MS);
 
     child.stdout?.on('data', (data) => {
       const text = data.toString();
