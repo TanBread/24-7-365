@@ -1,6 +1,6 @@
 {
   "name": "desktop-gui",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "7/24 IDE Desktop GUI",
   "main": "dist/main.js",
   "scripts": {
