@@ -6868,8 +6868,8 @@ button:focus-visible,
 /* ─── Auto-update banner (top-right toast) ───────────────────────────────── */
 .updater-banner {
   position: fixed;
-  top: 56px;
-  right: 16px;
+  bottom: 16px;
+  left: 16px;
   z-index: var(--z-modal);
   display: flex;
   align-items: center;
@@ -8905,7 +8905,8 @@ body.theme-dark .welcome-state {
   .sidebar-footer span:not(.sidebar-version-label),
   .sidebar-folder-path-clickable,
   .sidebar-workspace-details,
-  .sidebar-folder-mini {
+  .sidebar-folder-mini,
+  .sidebar-version-label {
     display: none !important;
   }
   .sidebar-footer-btn {
