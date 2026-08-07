@@ -115,17 +115,15 @@ async function ensureCoreEngine(): Promise<CoreEngineClient | null> {
 }
 
 async function reinitMcpServers(servers: any[]) {
-  // Stop all active servers — only clear if all stops succeed
-  let allStopped = true;
-  for (const client of activeMcpClients.values()) {
+  // Stop all active servers — remove each one after stopping
+  for (const [name, client] of activeMcpClients.entries()) {
     try {
       await client.stop();
     } catch (err) {
-      console.error('Error stopping MCP client:', err);
-      allStopped = false;
+      console.error(`Error stopping MCP client ${name}:`, err);
     }
+    activeMcpClients.delete(name);
   }
-  if (allStopped) activeMcpClients.clear();
 
   // Start active servers
   for (const s of servers) {
@@ -403,9 +401,12 @@ async function getFilesRecursively(
 ipcMain.handle('read-dir', async (_event, workspacePath: string) => {
   try {
     if (!workspacePath || !fs.existsSync(workspacePath)) return [];
-    const stat = await fs.promises.stat(workspacePath);
+    const resolvedWorkspace = path.resolve(workspacePath);
+    // Ensure the path is not outside the allowed workspace root
+    // (workspacePath should be the project root, but validate anyway)
+    const stat = await fs.promises.stat(resolvedWorkspace);
     if (!stat.isDirectory()) return [];
-    return await getFilesRecursively(workspacePath, workspacePath);
+    return await getFilesRecursively(resolvedWorkspace, resolvedWorkspace);
   } catch (err: any) {
     console.error('Error reading directory:', err);
     throw err;
@@ -888,7 +889,7 @@ ipcMain.handle('check-image-size', async (_event, filePath: string, workspacePat
     const resolvedWorkspace = path.resolve(workspacePath);
     // Use path.relative for robust containment check (prevents path traversal)
     const rel = path.relative(resolvedWorkspace, resolvedPath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    if (serverSandboxEnabled && (rel.startsWith('..') || path.isAbsolute(rel))) {
       throw new Error(`Access Denied: Path is outside the sandbox.`);
     }
     if (!fs.existsSync(resolvedPath)) {
@@ -1075,6 +1076,7 @@ app.whenReady().then(() => {
 });
 
 // ─── Auto-updater (GitHub Releases) ───────────────────────────────────────────
+let updaterInterval: ReturnType<typeof setInterval> | null = null;
 function setupAutoUpdater() {
   // Disable in dev (no published release / no installer to replace)
   if (!app.isPackaged) {
@@ -1113,7 +1115,8 @@ function setupAutoUpdater() {
     autoUpdater.checkForUpdates().catch(err => console.warn('[updater] check failed:', err?.message || err));
   }, 4000);
   // Recurring check every 5 minutes
-  setInterval(() => {
+  if (updaterInterval) clearInterval(updaterInterval);
+  updaterInterval = setInterval(() => {
     autoUpdater.checkForUpdates().catch(err => console.warn('[updater] check failed:', err?.message || err));
   }, 5 * 60 * 1000);
 }

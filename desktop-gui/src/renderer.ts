@@ -4478,6 +4478,7 @@ async function streamChatCompletion(messages: any[], model: string, apiKey: stri
 let term: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let termObserver: MutationObserver | null = null;
+let termResizeHandler: (() => void) | null = null;
 let terminalHasContent = false;
 
 function initTerminal() {
@@ -4503,11 +4504,14 @@ function initTerminal() {
   term.open(out);
   fitAddon.fit();
   
-  window.addEventListener('resize', () => {
+  // Watch for window resize
+  if (termResizeHandler) window.removeEventListener('resize', termResizeHandler);
+  termResizeHandler = () => {
     if (fitAddon && document.getElementById('terminal-view')?.style.display !== 'none') {
       fitAddon.fit();
     }
-  });
+  };
+  window.addEventListener('resize', termResizeHandler);
 
   // Watch for tab visibility changes
   if (termObserver) termObserver.disconnect();
@@ -4565,8 +4569,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     return t('ОШИБКА: Рабочая папка не выбрана. Скажите пользователю: «Пожалуйста, нажмите кнопку «Открыть» внизу боковой панели слева и выберите папку для работы.»');
   }
 
-  // Prepend .shadow-workspace/ to path if plan execution is active (disabled here to avoid double-prepend in API)
-  const mapPath = (p: string) => p;
+  // Active workspace: shadow workspace for plan execution, else real workspace
   const activeWorkspace = isExecutingPlan ? `${workspacePath}/.shadow-workspace` : workspacePath;
 
   // Scope filter: ensure operations stay within scopePath if set
@@ -4607,7 +4610,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       const allowed = await requestPermission('read', `Чтение содержимого файла: "${tool.params.path}"`);
       if (!allowed) return t('Действие отклонено пользователем.');
     }
-    const content = await window.electronAPI.readFile(mapPath(tool.params.path), activeWorkspace, settings.sandboxEnabled);
+    const content = await window.electronAPI.readFile(tool.params.path, activeWorkspace, settings.sandboxEnabled);
     if (tool.params.full) {
       return content;
     }
@@ -4631,7 +4634,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
     if (settings.permWrite === 'review') {
       let oldContent = '';
       try {
-        oldContent = await window.electronAPI.readFile(mapPath(tool.params.path), activeWorkspace, settings.sandboxEnabled);
+        oldContent = await window.electronAPI.readFile(tool.params.path, activeWorkspace, settings.sandboxEnabled);
       } catch (e) {}
       const allowed = await requestWritePermissionWithDiff(tool.params.path, oldContent, tool.params.content);
       if (!allowed) return t('Действие отклонено пользователем в режиме Авто-Ревью.');
@@ -4640,7 +4643,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       if (!allowed) return t('Действие отклонено пользователем.');
     }
 
-    await window.electronAPI.writeFile(mapPath(tool.params.path), tool.params.content, activeWorkspace, settings.sandboxEnabled);
+    await window.electronAPI.writeFile(tool.params.path, tool.params.content, activeWorkspace, settings.sandboxEnabled);
     buildSessionWroteFiles = true;
     noteFileTouched(tool.params.path);
     return t('Успешно записано на диск.');
@@ -4656,7 +4659,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
 
     let oldContent = '';
     try {
-      oldContent = await window.electronAPI.readFile(mapPath(tool.params.path), activeWorkspace, settings.sandboxEnabled);
+      oldContent = await window.electronAPI.readFile(tool.params.path, activeWorkspace, settings.sandboxEnabled);
     } catch (e: any) {
       return `${t('Ошибка')}: ${t('Не удалось прочитать оригинальный файл для редактирования')}: ${e.message}`;
     }
@@ -4754,7 +4757,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       if (!allowed) return t('Действие отклонено пользователем.');
     }
 
-    await window.electronAPI.writeFile(mapPath(tool.params.path), newContent, activeWorkspace, settings.sandboxEnabled);
+    await window.electronAPI.writeFile(tool.params.path, newContent, activeWorkspace, settings.sandboxEnabled);
     buildSessionWroteFiles = true;
     noteFileTouched(tool.params.path);
     return t('Изменения успешно применены к файлу.');
@@ -4903,7 +4906,7 @@ async function handleToolExecution(tool: AgentTool): Promise<string> {
       return `${t('Ошибка')}: ${t('Путь')} "${tool.params.path}" ${t('находится за пределами области работы')} "${scopePath}".`;
     }
     try {
-      const info = await window.electronAPI.checkImageSize(mapPath(tool.params.path), activeWorkspace);
+      const info = await window.electronAPI.checkImageSize(tool.params.path, activeWorkspace);
       return JSON.stringify(info, null, 2);
     } catch (e: any) {
       return `${t('Ошибка при проверке размера изображения')}: ${e.message}`;
@@ -5204,8 +5207,6 @@ function requestWritePermissionWithDiff(filePath: string, oldContent: string, ne
       btnClose.removeEventListener('click', handleReject);
       modal.removeEventListener('click', handleBackdrop);
       document.removeEventListener('keydown', handleEscape);
-      btnClose.removeEventListener('click', handleReject);
-      modal.removeEventListener('click', handleBackdrop);
     };
 
     const handleApprove = () => {

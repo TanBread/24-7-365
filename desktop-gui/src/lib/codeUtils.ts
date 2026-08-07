@@ -39,7 +39,7 @@ export function compressCodeContext(filename: string, content: string): string {
       if (bracketDepth <= 0) {
         bracketDepth = 0;
         inFold = false;
-        resultLines.push(line.replace(/^.*?}/, '}'));
+        resultLines.push(line.replace(/^.*?(}+)$/, '$1'));
       }
       continue;
     }
