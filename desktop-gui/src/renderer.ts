@@ -6458,6 +6458,7 @@ function playNotificationSound() {
 // INIT
 // ═══════════════════════════════════════════
 function init() {
+  console.time('IDE startup');
   loadSettings(); 
   // Sync language to the main process on startup.
   if (window.electronAPI?.setLanguage) {
@@ -7676,6 +7677,7 @@ document.getElementById('btn-export-chat')?.addEventListener('click', () => {
   };
   document.addEventListener('click', initAudio, true);
   document.addEventListener('keydown', initAudio, true);
+  console.timeEnd('IDE startup');
 }
 
 // ═══════════════════════════════════════════
